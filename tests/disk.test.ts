@@ -65,6 +65,48 @@ describe("loadFromDisk", () => {
 		}
 	});
 
+	test("respects .gitignore when gitignore option is true", async () => {
+		const dir = makeTempDir();
+		try {
+			fs.writeFileSync(nodePath.join(dir, ".gitignore"), "*.log\nbuild/\n!keep.log\n");
+			fs.writeFileSync(nodePath.join(dir, "a.txt"), "a");
+			fs.writeFileSync(nodePath.join(dir, "debug.log"), "no");
+			fs.writeFileSync(nodePath.join(dir, "keep.log"), "yes");
+			fs.mkdirSync(nodePath.join(dir, "build"));
+			fs.writeFileSync(nodePath.join(dir, "build/out.js"), "no");
+
+			const vfs = new VirtualFileSystem();
+			await loadFromDisk(vfs, dir, { gitignore: true });
+
+			expect(vfs.exists("/a.txt")).toBe(true);
+			expect(vfs.exists("/keep.log")).toBe(true);
+			expect(vfs.exists("/debug.log")).toBe(false);
+			expect(vfs.exists("/build")).toBe(false);
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("nested .gitignore is scoped to its directory", async () => {
+		const dir = makeTempDir();
+		try {
+			fs.mkdirSync(nodePath.join(dir, "src"));
+			fs.writeFileSync(nodePath.join(dir, "src/.gitignore"), "secret.txt\n");
+			fs.writeFileSync(nodePath.join(dir, "src/secret.txt"), "no");
+			fs.writeFileSync(nodePath.join(dir, "src/index.ts"), "yes");
+			fs.writeFileSync(nodePath.join(dir, "secret.txt"), "yes — root");
+
+			const vfs = new VirtualFileSystem();
+			await loadFromDisk(vfs, dir, { gitignore: true });
+
+			expect(vfs.exists("/src/index.ts")).toBe(true);
+			expect(vfs.exists("/src/secret.txt")).toBe(false);
+			expect(vfs.exists("/secret.txt")).toBe(true);
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
 	test("records symlinks as symlinks by default", async () => {
 		const dir = makeTempDir();
 		try {
