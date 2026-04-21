@@ -7,6 +7,14 @@ export { ObjectFileSystem } from "./adapters/object-fs.js";
 export { ReadOnlyFileSystem } from "./adapters/read-only.js";
 // The default in-memory implementation
 export { VirtualFileSystem, type VirtualFileSystemOptions } from "./filesystem.js";
+// Gitignore matcher (browser-safe — pure JS)
+export {
+	GitIgnore,
+	type GitIgnoreAddOptions,
+	type GitIgnoreRule,
+	matchGitignore,
+	parseGitignore,
+} from "./gitignore.js";
 // Glob
 export { globFiles, globMatch, useWasmGlob } from "./glob.js";
 export type { NodeMeta, VfsNode } from "./node.js";

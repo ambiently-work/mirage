@@ -9,6 +9,7 @@
 
 import * as fs from "node:fs";
 import * as nodePath from "node:path";
+import { GitIgnore } from "./gitignore.js";
 import type { IFileSystem } from "./types.js";
 
 export interface LoadFromDiskOptions {
@@ -35,6 +36,16 @@ export interface LoadFromDiskOptions {
 	 * to 10 MiB. Set to `Infinity` to disable.
 	 */
 	maxFileBytes?: number;
+	/**
+	 * Apply `.gitignore` rules while walking. `true` reads `.gitignore` files
+	 * from the source tree (root + nested). An array of patterns adds extra
+	 * rules on top. Combines with {@link filter} — both must accept a path
+	 * for it to be loaded.
+	 *
+	 * Note: the default filter still excludes `.git`, `node_modules`, etc.
+	 * Pass an explicit `filter` if you want to include them.
+	 */
+	gitignore?: boolean | string[];
 }
 
 const DEFAULT_EXCLUDES = new Set([
@@ -83,9 +94,11 @@ export async function loadFromDisk(
 		throw new Error(`loadFromDisk: source is not a directory: ${sourcePath}`);
 	}
 
+	const ignore = await buildIgnore(absSource, options?.gitignore);
+
 	ensureDir(vfs, target);
 
-	await walkDir(absSource, "", vfs, target, filter, followSymlinks, maxFileBytes);
+	await walkDir(absSource, "", vfs, target, filter, followSymlinks, maxFileBytes, ignore);
 }
 
 async function walkDir(
@@ -96,8 +109,19 @@ async function walkDir(
 	filter: (relativePath: string, isDirectory: boolean) => boolean,
 	followSymlinks: boolean,
 	maxFileBytes: number,
+	ignore: GitIgnore | null,
 ): Promise<void> {
 	const absDir = relative === "" ? sourceRoot : nodePath.join(sourceRoot, relative);
+
+	if (ignore) {
+		try {
+			const localIgnore = await fs.promises.readFile(nodePath.join(absDir, ".gitignore"), "utf8");
+			ignore.add(localIgnore, { base: relative });
+		} catch {
+			// no .gitignore here — that's fine
+		}
+	}
+
 	const entries = await fs.promises.readdir(absDir, { withFileTypes: true });
 
 	for (const entry of entries) {
@@ -106,6 +130,7 @@ async function walkDir(
 
 		if (entry.isSymbolicLink() && !followSymlinks) {
 			if (!filter(childRelative, false)) continue;
+			if (ignore?.ignores(childRelative, false)) continue;
 			const linkTarget = await fs.promises.readlink(nodePath.join(absDir, entry.name));
 			vfs.symlink(linkTarget, vfsPath);
 			continue;
@@ -118,13 +143,24 @@ async function walkDir(
 
 		if (stats.isDirectory()) {
 			if (!filter(childRelative, true)) continue;
+			if (ignore?.ignores(childRelative, true)) continue;
 			vfs.mkdir(vfsPath, { recursive: true });
-			await walkDir(sourceRoot, childRelative, vfs, target, filter, followSymlinks, maxFileBytes);
+			await walkDir(
+				sourceRoot,
+				childRelative,
+				vfs,
+				target,
+				filter,
+				followSymlinks,
+				maxFileBytes,
+				ignore,
+			);
 			continue;
 		}
 
 		if (stats.isFile()) {
 			if (!filter(childRelative, false)) continue;
+			if (ignore?.ignores(childRelative, false)) continue;
 			if (stats.size > maxFileBytes) {
 				throw new Error(
 					`loadFromDisk: ${childRelative} is ${stats.size} bytes (max ${maxFileBytes}). ` +
@@ -140,6 +176,24 @@ async function walkDir(
 			}
 		}
 	}
+}
+
+async function buildIgnore(
+	sourceRoot: string,
+	option: LoadFromDiskOptions["gitignore"],
+): Promise<GitIgnore | null> {
+	if (!option) return null;
+	const ignore = new GitIgnore();
+	if (option === true || Array.isArray(option)) {
+		try {
+			const root = await fs.promises.readFile(nodePath.join(sourceRoot, ".gitignore"), "utf8");
+			ignore.add(root);
+		} catch {
+			// No root .gitignore — still fine, nested ones may exist.
+		}
+		if (Array.isArray(option)) ignore.add(option);
+	}
+	return ignore;
 }
 
 export interface SaveToDiskOptions {
