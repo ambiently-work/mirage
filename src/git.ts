@@ -1,9 +1,9 @@
 /**
  * Node-only helpers for loading a git repository (URL or local working tree)
- * into a mirage VFS, and saving a VFS subtree back out as a git repo.
+ * into a mirage, and saving a mirage subtree back out as a git repo.
  *
- * This module is NOT imported from the main `@ambiently-work/vfs` entry point —
- * access it via `@ambiently-work/vfs/git`. Keeps the core browser-safe.
+ * This module is NOT imported from the main `@ambiently-work/mirage` entry point —
+ * access it via `@ambiently-work/mirage/git`. Keeps the core browser-safe.
  *
  * Requires the `git` binary on `PATH` for clone / commit operations.
  */
@@ -24,7 +24,7 @@ import type { IFileSystem } from "./types.js";
 const execFileP = promisify(execFile);
 
 /**
- * Information about the git source loaded into the VFS. Returned by
+ * Information about the git source loaded into the mirage. Returned by
  * {@link loadFromGit} so callers can attribute changes back to a commit.
  */
 export interface GitMetadata {
@@ -77,23 +77,23 @@ export interface LoadFromGitOptions extends Omit<LoadFromDiskOptions, "filter"> 
 	/**
 	 * If `true`, keep the cloned temp directory after loading. The path is
 	 * exposed via the returned {@link GitMetadata.workingTreePath}. Defaults
-	 * to `false` — temp clones are removed after the VFS has been hydrated.
+	 * to `false` — temp clones are removed after the mirage has been hydrated.
 	 */
 	keepClone?: boolean;
 }
 
 /**
- * Load a git repository into the VFS. `source` may be a remote URL
+ * Load a git repository into the mirage. `source` may be a remote URL
  * (https/ssh/git/scp-style) or a local path. Local paths use
  * `git ls-files` to enumerate tracked + (optionally) untracked files, so
  * `.gitignore` rules and `core.excludesfile` are respected automatically.
  *
  * ```ts
- * import { VirtualFileSystem } from "@ambiently-work/vfs";
- * import { loadFromGit } from "@ambiently-work/vfs/git";
+ * import { VirtualFileSystem } from "@ambiently-work/mirage";
+ * import { loadFromGit } from "@ambiently-work/mirage/git";
  *
- * const vfs = new VirtualFileSystem();
- * const meta = await loadFromGit(vfs, "https://github.com/foo/bar", {
+ * const mirage = new VirtualFileSystem();
+ * const meta = await loadFromGit(mirage, "https://github.com/foo/bar", {
  *   ref: "v1.2.3",
  *   target: "/workspace",
  * });
@@ -101,7 +101,7 @@ export interface LoadFromGitOptions extends Omit<LoadFromDiskOptions, "filter"> 
  * ```
  */
 export async function loadFromGit(
-	vfs: IFileSystem,
+	mirage: IFileSystem,
 	source: string,
 	options?: LoadFromGitOptions,
 ): Promise<GitMetadata> {
@@ -141,7 +141,7 @@ export async function loadFromGit(
 		const isRepo = await isGitRepo(workingTree);
 		if (!isRepo) {
 			// No `.git` — fall back to plain disk load, applying any user filter.
-			await loadFromDisk(vfs, workingTree, {
+			await loadFromDisk(mirage, workingTree, {
 				target,
 				followSymlinks,
 				maxFileBytes,
@@ -156,7 +156,7 @@ export async function loadFromGit(
 		}
 
 		const files = await listGitFiles(workingTree, includeUntracked);
-		await hydrateFromList(vfs, workingTree, target, files, {
+		await hydrateFromList(mirage, workingTree, target, files, {
 			followSymlinks,
 			maxFileBytes,
 			filter: userFilter,
@@ -205,12 +205,12 @@ export interface SaveAsGitRepoOptions extends SaveToDiskOptions {
 }
 
 /**
- * Write the contents of a VFS subtree to disk and (by default) initialise it
+ * Write the contents of a mirage subtree to disk and (by default) initialise it
  * as a git repository. Useful for handing an agent's scratch workspace back
- * to a real git workflow — clone → edit in VFS → commit & push.
+ * to a real git workflow — clone → edit in mirage → commit & push.
  *
  * ```ts
- * await saveAsGitRepo(vfs, "/workspace", "/tmp/out", {
+ * await saveAsGitRepo(mirage, "/workspace", "/tmp/out", {
  *   commit: {
  *     message: "feat: agent edits",
  *     author: { name: "Agent", email: "agent@example.com" },
@@ -219,15 +219,15 @@ export interface SaveAsGitRepoOptions extends SaveToDiskOptions {
  * ```
  */
 export async function saveAsGitRepo(
-	vfs: IFileSystem,
-	vfsPath: string,
+	mirage: IFileSystem,
+	miragePath: string,
 	targetPath: string,
 	options?: SaveAsGitRepoOptions,
 ): Promise<void> {
 	const init = options?.init ?? true;
 	const branch = options?.branch ?? "main";
 
-	await saveToDisk(vfs, vfsPath, targetPath, {
+	await saveToDisk(mirage, miragePath, targetPath, {
 		clean: options?.clean,
 		mkdirp: options?.mkdirp,
 	});
@@ -352,20 +352,20 @@ interface HydrateOptions {
 }
 
 async function hydrateFromList(
-	vfs: IFileSystem,
+	mirage: IFileSystem,
 	root: string,
 	target: string,
 	files: string[],
 	options: HydrateOptions,
 ): Promise<void> {
 	const normalisedTarget = normalizeTarget(target);
-	ensureDir(vfs, normalisedTarget);
+	ensureDir(mirage, normalisedTarget);
 
 	for (const rel of files) {
 		if (options.filter && !options.filter(rel, false)) continue;
 
 		const absPath = nodePath.join(root, rel);
-		const vfsPath = normalisedTarget === "/" ? `/${rel}` : `${normalisedTarget}/${rel}`;
+		const miragePath = normalisedTarget === "/" ? `/${rel}` : `${normalisedTarget}/${rel}`;
 
 		const stat = options.followSymlinks
 			? await fs.promises.stat(absPath).catch(() => null)
@@ -373,12 +373,12 @@ async function hydrateFromList(
 		if (!stat) continue; // file may have been deleted between ls-files and now
 
 		// Make sure intermediate dirs exist
-		const parent = vfsPath.substring(0, vfsPath.lastIndexOf("/")) || "/";
-		if (parent !== "/") vfs.mkdir(parent, { recursive: true });
+		const parent = miragePath.substring(0, miragePath.lastIndexOf("/")) || "/";
+		if (parent !== "/") mirage.mkdir(parent, { recursive: true });
 
 		if (stat.isSymbolicLink() && !options.followSymlinks) {
 			const linkTarget = await fs.promises.readlink(absPath);
-			vfs.symlink(linkTarget, vfsPath);
+			mirage.symlink(linkTarget, miragePath);
 			continue;
 		}
 
@@ -396,9 +396,9 @@ async function hydrateFromList(
 				);
 			}
 			const content = await fs.promises.readFile(absPath, "utf8");
-			vfs.writeFile(vfsPath, content);
+			mirage.writeFile(miragePath, content);
 			try {
-				vfs.chmod(vfsPath, stat.mode & 0o777);
+				mirage.chmod(miragePath, stat.mode & 0o777);
 			} catch {
 				// chmod is best-effort.
 			}
@@ -427,13 +427,13 @@ async function runGitNullable(cwd: string, args: string[]): Promise<string | nul
 	}
 }
 
-function ensureDir(vfs: IFileSystem, path: string): void {
+function ensureDir(mirage: IFileSystem, path: string): void {
 	if (path === "/" || path === "") return;
-	if (!vfs.exists(path)) {
-		vfs.mkdir(path, { recursive: true });
+	if (!mirage.exists(path)) {
+		mirage.mkdir(path, { recursive: true });
 		return;
 	}
-	const stat = vfs.stat(path);
+	const stat = mirage.stat(path);
 	if (!stat.isDirectory()) {
 		throw new Error(`target exists but is not a directory: ${path}`);
 	}

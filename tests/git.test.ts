@@ -62,14 +62,14 @@ describe("loadFromGit (local repo)", () => {
 	test("hydrates tracked files and skips ignored ones", async () => {
 		const repo = makeRepo();
 		try {
-			const vfs = new VirtualFileSystem();
-			const meta = await loadFromGit(vfs, repo.dir, { target: "/workspace" });
+			const mirage = new VirtualFileSystem();
+			const meta = await loadFromGit(mirage, repo.dir, { target: "/workspace" });
 
-			expect(vfs.readFile("/workspace/README.md")).toBe("# Hello\n");
-			expect(vfs.readFile("/workspace/src/index.ts")).toBe("export const x = 1;\n");
-			expect(vfs.readFile("/workspace/.gitignore")).toBe("build/\n*.log\n");
-			expect(vfs.exists("/workspace/build/output.js")).toBe(false);
-			expect(vfs.exists("/workspace/debug.log")).toBe(false);
+			expect(mirage.readFile("/workspace/README.md")).toBe("# Hello\n");
+			expect(mirage.readFile("/workspace/src/index.ts")).toBe("export const x = 1;\n");
+			expect(mirage.readFile("/workspace/.gitignore")).toBe("build/\n*.log\n");
+			expect(mirage.exists("/workspace/build/output.js")).toBe(false);
+			expect(mirage.exists("/workspace/debug.log")).toBe(false);
 
 			expect(meta.branch).toBe("main");
 			expect(meta.commit?.length).toBe(40);
@@ -85,9 +85,9 @@ describe("loadFromGit (local repo)", () => {
 		const repo = makeRepo();
 		try {
 			fs.writeFileSync(nodePath.join(repo.dir, "todo.txt"), "wip");
-			const vfs = new VirtualFileSystem();
-			await loadFromGit(vfs, repo.dir);
-			expect(vfs.readFile("/todo.txt")).toBe("wip");
+			const mirage = new VirtualFileSystem();
+			await loadFromGit(mirage, repo.dir);
+			expect(mirage.readFile("/todo.txt")).toBe("wip");
 		} finally {
 			repo.cleanup();
 		}
@@ -97,9 +97,9 @@ describe("loadFromGit (local repo)", () => {
 		const repo = makeRepo();
 		try {
 			fs.writeFileSync(nodePath.join(repo.dir, "todo.txt"), "wip");
-			const vfs = new VirtualFileSystem();
-			await loadFromGit(vfs, repo.dir, { includeUntracked: false });
-			expect(vfs.exists("/todo.txt")).toBe(false);
+			const mirage = new VirtualFileSystem();
+			await loadFromGit(mirage, repo.dir, { includeUntracked: false });
+			expect(mirage.exists("/todo.txt")).toBe(false);
 		} finally {
 			repo.cleanup();
 		}
@@ -112,10 +112,10 @@ describe("loadFromGit (local repo)", () => {
 			fs.writeFileSync(nodePath.join(dir, ".gitignore"), "ignored.txt\n");
 			fs.writeFileSync(nodePath.join(dir, "ignored.txt"), "no");
 
-			const vfs = new VirtualFileSystem();
-			const meta = await loadFromGit(vfs, dir);
-			expect(vfs.readFile("/a.txt")).toBe("hi");
-			expect(vfs.exists("/ignored.txt")).toBe(false);
+			const mirage = new VirtualFileSystem();
+			const meta = await loadFromGit(mirage, dir);
+			expect(mirage.readFile("/a.txt")).toBe("hi");
+			expect(mirage.exists("/ignored.txt")).toBe(false);
 			expect(meta.cloned).toBe(false);
 			expect(meta.commit).toBeUndefined();
 		} finally {
@@ -126,8 +126,8 @@ describe("loadFromGit (local repo)", () => {
 	test("rejects ref on a local path", async () => {
 		const repo = makeRepo();
 		try {
-			const vfs = new VirtualFileSystem();
-			await expect(loadFromGit(vfs, repo.dir, { ref: "main" })).rejects.toThrow(/ref/);
+			const mirage = new VirtualFileSystem();
+			await expect(loadFromGit(mirage, repo.dir, { ref: "main" })).rejects.toThrow(/ref/);
 		} finally {
 			repo.cleanup();
 		}
@@ -138,9 +138,9 @@ describe("loadFromGit (clone)", () => {
 	test("clones a local file:// URL into a temp dir", async () => {
 		const repo = makeRepo();
 		try {
-			const vfs = new VirtualFileSystem();
-			const meta = await loadFromGit(vfs, `file://${repo.dir}`, { depth: 1 });
-			expect(vfs.readFile("/README.md")).toBe("# Hello\n");
+			const mirage = new VirtualFileSystem();
+			const meta = await loadFromGit(mirage, `file://${repo.dir}`, { depth: 1 });
+			expect(mirage.readFile("/README.md")).toBe("# Hello\n");
 			expect(meta.cloned).toBe(true);
 			// Temp clone should be cleaned up by default
 			expect(fs.existsSync(meta.workingTreePath)).toBe(false);
@@ -152,8 +152,8 @@ describe("loadFromGit (clone)", () => {
 	test("keepClone=true preserves the temp dir", async () => {
 		const repo = makeRepo();
 		try {
-			const vfs = new VirtualFileSystem();
-			const meta = await loadFromGit(vfs, `file://${repo.dir}`, {
+			const mirage = new VirtualFileSystem();
+			const meta = await loadFromGit(mirage, `file://${repo.dir}`, {
 				depth: 1,
 				keepClone: true,
 			});
@@ -169,14 +169,14 @@ describe("saveAsGitRepo", () => {
 	test("writes files, runs git init, and commits", async () => {
 		const dest = makeTempDir();
 		try {
-			const vfs = new VirtualFileSystem({
+			const mirage = new VirtualFileSystem({
 				files: {
 					"/work/package.json": `{"name":"x"}`,
 					"/work/src/index.ts": "export const x = 1;\n",
 				},
 			});
 
-			await saveAsGitRepo(vfs, "/work", dest, {
+			await saveAsGitRepo(mirage, "/work", dest, {
 				commit: {
 					message: "feat: initial commit",
 					author: { name: "Test", email: "test@example.com" },
@@ -196,16 +196,16 @@ describe("saveAsGitRepo", () => {
 	test("commit is a no-op on an empty diff", async () => {
 		const dest = makeTempDir();
 		try {
-			const vfs = new VirtualFileSystem({ files: { "/work/a.txt": "hi" } });
+			const mirage = new VirtualFileSystem({ files: { "/work/a.txt": "hi" } });
 
-			await saveAsGitRepo(vfs, "/work", dest, {
+			await saveAsGitRepo(mirage, "/work", dest, {
 				commit: {
 					message: "first",
 					author: { name: "Test", email: "test@example.com" },
 				},
 			});
 			// Second save with no changes should not throw
-			await saveAsGitRepo(vfs, "/work", dest, {
+			await saveAsGitRepo(mirage, "/work", dest, {
 				commit: {
 					message: "noop",
 					author: { name: "Test", email: "test@example.com" },
@@ -222,8 +222,8 @@ describe("saveAsGitRepo", () => {
 	test("adds a remote when one is requested", async () => {
 		const dest = makeTempDir();
 		try {
-			const vfs = new VirtualFileSystem({ files: { "/work/a.txt": "hi" } });
-			await saveAsGitRepo(vfs, "/work", dest, {
+			const mirage = new VirtualFileSystem({ files: { "/work/a.txt": "hi" } });
+			await saveAsGitRepo(mirage, "/work", dest, {
 				remote: { name: "origin", url: "https://example.com/foo.git" },
 			});
 
@@ -241,9 +241,9 @@ describe("round trip", () => {
 		const repo = makeRepo();
 		const dest = makeTempDir();
 		try {
-			const vfs = new VirtualFileSystem();
-			await loadFromGit(vfs, repo.dir);
-			await saveAsGitRepo(vfs, "/", dest, {
+			const mirage = new VirtualFileSystem();
+			await loadFromGit(mirage, repo.dir);
+			await saveAsGitRepo(mirage, "/", dest, {
 				commit: {
 					message: "feat: round-trip",
 					author: { name: "Test", email: "test@example.com" },

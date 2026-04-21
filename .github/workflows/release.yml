@@ -27,7 +27,7 @@ jobs:
           manifest-file: .release-please-manifest.json
 
   publish:
-    name: Publish @ambiently-work/vfs
+    name: Publish @ambiently-work/mirage
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
@@ -69,34 +69,34 @@ jobs:
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch vfs-released to faux
+      - name: Dispatch mirage-released to faux
         env:
           GH_TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
           VERSION: ${{ needs.release-please.outputs.version }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
-          PACKAGE: "@ambiently-work/vfs"
+          PACKAGE: "@ambiently-work/mirage"
         run: |
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             /repos/ambiently-work/faux/dispatches \
-            -f event_type=vfs-released \
+            -f event_type=mirage-released \
             -F "client_payload[version]=$VERSION" \
             -F "client_payload[tag]=$TAG" \
             -F "client_payload[package]=$PACKAGE"
 
-      - name: Dispatch vfs-released to agent-sdk
+      - name: Dispatch mirage-released to agent-sdk
         env:
           GH_TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
           VERSION: ${{ needs.release-please.outputs.version }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
-          PACKAGE: "@ambiently-work/vfs"
+          PACKAGE: "@ambiently-work/mirage"
         run: |
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             /repos/ambiently-work/agent-sdk/dispatches \
-            -f event_type=vfs-released \
+            -f event_type=mirage-released \
             -F "client_payload[version]=$VERSION" \
             -F "client_payload[tag]=$TAG" \
             -F "client_payload[package]=$PACKAGE"

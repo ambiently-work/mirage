@@ -220,7 +220,7 @@ function matchCharClass(classContent: string, ch: string): boolean {
 }
 
 /**
- * Walk the VFS and return all file paths matching a glob pattern.
+ * Walk the mirage and return all file paths matching a glob pattern.
  */
 export function globFiles(fs: IFileSystem, pattern: string, cwd: string): string[] {
 	const absPattern = isAbsolute(pattern) ? pattern : join(cwd, pattern);

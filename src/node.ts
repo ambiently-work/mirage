@@ -7,9 +7,9 @@ export interface NodeMeta {
 	ctime: number;
 }
 
-export type VfsNode =
+export type MirageNode =
 	| { kind: "file"; content: string; meta: NodeMeta }
-	| { kind: "directory"; children: Map<string, VfsNode>; meta: NodeMeta }
+	| { kind: "directory"; children: Map<string, MirageNode>; meta: NodeMeta }
 	| { kind: "symlink"; target: string; meta: NodeMeta };
 
 export function defaultMeta(mode: number): NodeMeta {
@@ -24,7 +24,7 @@ export function defaultMeta(mode: number): NodeMeta {
 	};
 }
 
-export function createFile(content: string = "", mode: number = 0o644): VfsNode {
+export function createFile(content: string = "", mode: number = 0o644): MirageNode {
 	return {
 		kind: "file",
 		content,
@@ -32,7 +32,7 @@ export function createFile(content: string = "", mode: number = 0o644): VfsNode 
 	};
 }
 
-export function createDirectory(mode: number = 0o755): VfsNode {
+export function createDirectory(mode: number = 0o755): MirageNode {
 	return {
 		kind: "directory",
 		children: new Map(),
@@ -40,7 +40,7 @@ export function createDirectory(mode: number = 0o755): VfsNode {
 	};
 }
 
-export function createSymlink(target: string): VfsNode {
+export function createSymlink(target: string): MirageNode {
 	return {
 		kind: "symlink",
 		target,

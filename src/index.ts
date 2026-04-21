@@ -17,7 +17,7 @@ export {
 } from "./gitignore.js";
 // Glob
 export { globFiles, globMatch, useWasmGlob } from "./glob.js";
-export type { NodeMeta, VfsNode } from "./node.js";
+export type { MirageNode, NodeMeta } from "./node.js";
 export { createDirectory, createFile, createSymlink, defaultMeta } from "./node.js";
 // Path utilities
 export {
@@ -33,5 +33,5 @@ export {
 } from "./path.js";
 // Snapshot / restore (full-fidelity — directories, symlinks, modes)
 export { restore, type Snapshot, type SnapshotNode, snapshot } from "./snapshot.js";
-export type { IFileSystem, VfsStats } from "./types.js";
+export type { IFileSystem, MirageStats } from "./types.js";
 export type { WasmGlobModule } from "./wasm.js";

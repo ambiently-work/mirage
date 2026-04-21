@@ -1,5 +1,5 @@
 import { VirtualFileSystem } from "./filesystem.js";
-import type { NodeMeta, VfsNode } from "./node.js";
+import type { MirageNode, NodeMeta } from "./node.js";
 
 /**
  * Full-fidelity snapshot of a {@link VirtualFileSystem}. Unlike
@@ -59,7 +59,7 @@ export function restore(
 	return fs;
 }
 
-function nodeToSnapshot(node: VfsNode): SnapshotNode {
+function nodeToSnapshot(node: MirageNode): SnapshotNode {
 	if (node.kind === "file") {
 		return { kind: "file", content: node.content, meta: { ...node.meta } };
 	}
@@ -73,14 +73,14 @@ function nodeToSnapshot(node: VfsNode): SnapshotNode {
 	return { kind: "directory", children, meta: { ...node.meta } };
 }
 
-function snapshotToNode(snap: SnapshotNode): VfsNode {
+function snapshotToNode(snap: SnapshotNode): MirageNode {
 	if (snap.kind === "file") {
 		return { kind: "file", content: snap.content, meta: { ...snap.meta } };
 	}
 	if (snap.kind === "symlink") {
 		return { kind: "symlink", target: snap.target, meta: { ...snap.meta } };
 	}
-	const children = new Map<string, VfsNode>();
+	const children = new Map<string, MirageNode>();
 	for (const [name, child] of Object.entries(snap.children)) {
 		children.set(name, snapshotToNode(child));
 	}

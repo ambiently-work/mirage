@@ -1,4 +1,4 @@
-import type { IFileSystem, VfsStats } from "../types.js";
+import type { IFileSystem, MirageStats } from "../types.js";
 
 /**
  * A read-only filesystem backed by HTTP requests.
@@ -97,7 +97,7 @@ export class HttpFileSystem implements IFileSystem {
 		return this.dirCache.get(path) ?? [];
 	}
 
-	stat(path: string): VfsStats {
+	stat(path: string): MirageStats {
 		const content = this.fetchSync(path);
 		return {
 			size: content.length,
@@ -113,7 +113,7 @@ export class HttpFileSystem implements IFileSystem {
 		};
 	}
 
-	lstat(path: string): VfsStats {
+	lstat(path: string): MirageStats {
 		return this.stat(path);
 	}
 

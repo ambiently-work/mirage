@@ -3,7 +3,7 @@
 	"release-type": "node",
 	"packages": {
 		".": {
-			"package-name": "@ambiently-work/vfs",
+			"package-name": "@ambiently-work/mirage",
 			"changelog-path": "CHANGELOG.md"
 		}
 	},
