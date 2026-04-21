@@ -1,11 +1,11 @@
 # mirage
 
-A **pluggable, in-process virtual filesystem** written in TypeScript. Works in the browser, in Bun, in Node, and inside sandboxes — with no `node:fs` dependency in the core. Ships with layered overlays, HTTP/object-backed adapters, snapshot/restore, a built-in `.gitignore` matcher, and Node-only helpers for loading a real repo (or a git URL) into and back out of the VFS.
+A **pluggable, in-process virtual filesystem** written in TypeScript. Works in the browser, in Bun, in Node, and inside sandboxes — with no `node:fs` dependency in the core. Ships with layered overlays, HTTP/object-backed adapters, snapshot/restore, a built-in `.gitignore` matcher, and Node-only helpers for loading a real repo (or a git URL) into and back out of the mirage.
 
 Built for agents, sandboxes, REPLs, and anything that needs "a filesystem without a filesystem."
 
 ```ts
-import { VirtualFileSystem } from "@ambiently-work/vfs";
+import { VirtualFileSystem } from "@ambiently-work/mirage";
 
 const fs = new VirtualFileSystem({
   files: { "/src/index.ts": "export const hi = 'world';\n" },
@@ -22,25 +22,25 @@ console.log(fs.readFile("/src/index.ts"));
 - **Mount points** — compose filesystems at arbitrary paths.
 - **Snapshot / restore** — dump the whole FS (including symlinks and modes) and rehydrate it later.
 - **Layered overlays** — a writable scratch layer on top of an immutable base.
-- **Disk loaders** (optional, `/disk` export) — load a directory from disk (with `.gitignore` support), or write the VFS back out.
+- **Disk loaders** (optional, `/disk` export) — load a directory from disk (with `.gitignore` support), or write the mirage back out.
 - **Git loaders** (optional, `/git` export) — clone a URL or hydrate from a local repo via `git ls-files`; save back out as a fresh repo with `git init` + commit.
 - **Built-in `.gitignore` matcher** — pure JS, browser-safe.
 - **Zero runtime deps** — core package is pure TypeScript.
 
 ## Packages
 
-Single package: `@ambiently-work/vfs`. Three entry points:
+Single package: `@ambiently-work/mirage`. Three entry points:
 
-- `@ambiently-work/vfs` — core (browser + server safe), incl. `GitIgnore` matcher.
-- `@ambiently-work/vfs/disk` — Node-only `loadFromDisk` / `saveToDisk`.
-- `@ambiently-work/vfs/git` — Node-only `loadFromGit` / `saveAsGitRepo` (requires the `git` binary).
+- `@ambiently-work/mirage` — core (browser + server safe), incl. `GitIgnore` matcher.
+- `@ambiently-work/mirage/disk` — Node-only `loadFromDisk` / `saveToDisk`.
+- `@ambiently-work/mirage/git` — Node-only `loadFromGit` / `saveAsGitRepo` (requires the `git` binary).
 
 ## Usage
 
 ### Basic
 
 ```ts
-import { VirtualFileSystem } from "@ambiently-work/vfs";
+import { VirtualFileSystem } from "@ambiently-work/mirage";
 
 const fs = new VirtualFileSystem();
 fs.mkdir("/src", { recursive: true });
@@ -51,7 +51,7 @@ fs.readDir("/src"); // ["hello.txt"]
 ### Snapshot and restore
 
 ```ts
-import { VirtualFileSystem, snapshot, restore } from "@ambiently-work/vfs";
+import { VirtualFileSystem, snapshot, restore } from "@ambiently-work/mirage";
 
 const fs = new VirtualFileSystem({ files: { "/a.txt": "hello" } });
 const snap = snapshot(fs);
@@ -67,8 +67,8 @@ restored.readFile("/a.txt"); // "hello"
 ### Load a directory from disk
 
 ```ts
-import { VirtualFileSystem } from "@ambiently-work/vfs";
-import { loadFromDisk, saveToDisk } from "@ambiently-work/vfs/disk";
+import { VirtualFileSystem } from "@ambiently-work/mirage";
+import { loadFromDisk, saveToDisk } from "@ambiently-work/mirage/disk";
 
 const fs = new VirtualFileSystem();
 await loadFromDisk(fs, "/path/to/repo", {
@@ -76,7 +76,7 @@ await loadFromDisk(fs, "/path/to/repo", {
   gitignore: true, // honour .gitignore files (root + nested) while walking
 });
 
-// …agent edits files in the VFS…
+// …agent edits files in the mirage…
 
 await saveToDisk(fs, "/workspace", "/path/to/output");
 ```
@@ -88,12 +88,12 @@ await saveToDisk(fs, "/workspace", "/path/to/output");
 automatically. After loading, you get back metadata about the `HEAD` commit.
 
 ```ts
-import { VirtualFileSystem } from "@ambiently-work/vfs";
-import { loadFromGit, saveAsGitRepo } from "@ambiently-work/vfs/git";
+import { VirtualFileSystem } from "@ambiently-work/mirage";
+import { loadFromGit, saveAsGitRepo } from "@ambiently-work/mirage/git";
 
 const fs = new VirtualFileSystem();
 
-// Clone a remote repo at a specific tag/branch into the VFS
+// Clone a remote repo at a specific tag/branch into the mirage
 const meta = await loadFromGit(fs, "https://github.com/foo/bar", {
   ref: "v1.2.3",
   depth: 1,
@@ -104,7 +104,7 @@ console.log(meta.commit, meta.commitMessage);
 // Or hydrate from a local checkout (uses `git ls-files`)
 await loadFromGit(fs, "./my-repo", { target: "/workspace" });
 
-// …agent edits files in the VFS…
+// …agent edits files in the mirage…
 
 // Persist the workspace back to disk and commit it as a fresh repo
 await saveAsGitRepo(fs, "/workspace", "/tmp/out", {
@@ -119,7 +119,7 @@ await saveAsGitRepo(fs, "/workspace", "/tmp/out", {
 ### Match a `.gitignore` (no Node required)
 
 ```ts
-import { GitIgnore, matchGitignore } from "@ambiently-work/vfs";
+import { GitIgnore, matchGitignore } from "@ambiently-work/mirage";
 
 const gi = new GitIgnore("*.log\n!important.log\n/build/\n");
 gi.ignores("foo.log"); // true
@@ -133,7 +133,7 @@ matchGitignore("dist/\n*.tmp", "dist/bundle.js"); // true
 ### Layered overlay
 
 ```ts
-import { LayeredFileSystem, VirtualFileSystem, ReadOnlyFileSystem } from "@ambiently-work/vfs";
+import { LayeredFileSystem, VirtualFileSystem, ReadOnlyFileSystem } from "@ambiently-work/mirage";
 
 const base = new ReadOnlyFileSystem(new VirtualFileSystem({ files: { "/etc/config": "..." } }));
 const overlay = new VirtualFileSystem();

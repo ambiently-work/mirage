@@ -1,5 +1,5 @@
 import { globMatch } from "../glob.js";
-import type { IFileSystem, VfsStats } from "../types.js";
+import type { IFileSystem, MirageStats } from "../types.js";
 
 /**
  * A simple flat filesystem backed by a plain object/Map.
@@ -53,7 +53,7 @@ export class ObjectFileSystem implements IFileSystem {
 		return this.dirs.has(normalized);
 	}
 
-	private makeStats(isFile: boolean, size: number, mtime: number): VfsStats {
+	private makeStats(isFile: boolean, size: number, mtime: number): MirageStats {
 		return {
 			size,
 			mode: isFile ? 0o644 : 0o755,
@@ -93,7 +93,7 @@ export class ObjectFileSystem implements IFileSystem {
 		return [...entries].sort();
 	}
 
-	stat(path: string): VfsStats {
+	stat(path: string): MirageStats {
 		const normalized = this.normalizePath(path);
 		const entry = this.files.get(normalized);
 		if (entry) {
@@ -105,7 +105,7 @@ export class ObjectFileSystem implements IFileSystem {
 		throw new Error(`ENOENT: no such file or directory: ${path}`);
 	}
 
-	lstat(path: string): VfsStats {
+	lstat(path: string): MirageStats {
 		return this.stat(path);
 	}
 

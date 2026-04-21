@@ -1,5 +1,5 @@
 {
-	"name": "@ambiently-work/vfs",
+	"name": "@ambiently-work/mirage",
 	"version": "0.0.1",
 	"description": "Mirage — a pluggable in-process virtual filesystem. Pure-JS, browser and server, with snapshot/restore, layered overlays, and disk/repo loaders.",
 	"license": "MIT",
@@ -11,8 +11,8 @@
 	},
 	"bugs": "https://github.com/ambiently-work/mirage/issues",
 	"keywords": [
+		"mirage",
 		"virtual-filesystem",
-		"vfs",
 		"in-memory",
 		"filesystem",
 		"sandbox",

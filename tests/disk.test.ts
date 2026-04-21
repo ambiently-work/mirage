@@ -17,11 +17,11 @@ describe("loadFromDisk", () => {
 			fs.writeFileSync(nodePath.join(dir, "package.json"), `{"name":"x"}`);
 			fs.writeFileSync(nodePath.join(dir, "src/index.ts"), "export const x = 1;");
 
-			const vfs = new VirtualFileSystem();
-			await loadFromDisk(vfs, dir, { target: "/workspace" });
+			const mirage = new VirtualFileSystem();
+			await loadFromDisk(mirage, dir, { target: "/workspace" });
 
-			expect(vfs.readFile("/workspace/package.json")).toBe(`{"name":"x"}`);
-			expect(vfs.readFile("/workspace/src/index.ts")).toBe("export const x = 1;");
+			expect(mirage.readFile("/workspace/package.json")).toBe(`{"name":"x"}`);
+			expect(mirage.readFile("/workspace/src/index.ts")).toBe("export const x = 1;");
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}
@@ -36,12 +36,12 @@ describe("loadFromDisk", () => {
 			fs.writeFileSync(nodePath.join(dir, ".git/HEAD"), "ref: main");
 			fs.writeFileSync(nodePath.join(dir, "kept.txt"), "ok");
 
-			const vfs = new VirtualFileSystem();
-			await loadFromDisk(vfs, dir);
+			const mirage = new VirtualFileSystem();
+			await loadFromDisk(mirage, dir);
 
-			expect(vfs.exists("/kept.txt")).toBe(true);
-			expect(vfs.exists("/node_modules")).toBe(false);
-			expect(vfs.exists("/.git")).toBe(false);
+			expect(mirage.exists("/kept.txt")).toBe(true);
+			expect(mirage.exists("/node_modules")).toBe(false);
+			expect(mirage.exists("/.git")).toBe(false);
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}
@@ -53,13 +53,13 @@ describe("loadFromDisk", () => {
 			fs.writeFileSync(nodePath.join(dir, "a.ts"), "a");
 			fs.writeFileSync(nodePath.join(dir, "b.js"), "b");
 
-			const vfs = new VirtualFileSystem();
-			await loadFromDisk(vfs, dir, {
+			const mirage = new VirtualFileSystem();
+			await loadFromDisk(mirage, dir, {
 				filter: (p) => p.endsWith(".ts"),
 			});
 
-			expect(vfs.exists("/a.ts")).toBe(true);
-			expect(vfs.exists("/b.js")).toBe(false);
+			expect(mirage.exists("/a.ts")).toBe(true);
+			expect(mirage.exists("/b.js")).toBe(false);
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}
@@ -75,13 +75,13 @@ describe("loadFromDisk", () => {
 			fs.mkdirSync(nodePath.join(dir, "build"));
 			fs.writeFileSync(nodePath.join(dir, "build/out.js"), "no");
 
-			const vfs = new VirtualFileSystem();
-			await loadFromDisk(vfs, dir, { gitignore: true });
+			const mirage = new VirtualFileSystem();
+			await loadFromDisk(mirage, dir, { gitignore: true });
 
-			expect(vfs.exists("/a.txt")).toBe(true);
-			expect(vfs.exists("/keep.log")).toBe(true);
-			expect(vfs.exists("/debug.log")).toBe(false);
-			expect(vfs.exists("/build")).toBe(false);
+			expect(mirage.exists("/a.txt")).toBe(true);
+			expect(mirage.exists("/keep.log")).toBe(true);
+			expect(mirage.exists("/debug.log")).toBe(false);
+			expect(mirage.exists("/build")).toBe(false);
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}
@@ -96,12 +96,12 @@ describe("loadFromDisk", () => {
 			fs.writeFileSync(nodePath.join(dir, "src/index.ts"), "yes");
 			fs.writeFileSync(nodePath.join(dir, "secret.txt"), "yes — root");
 
-			const vfs = new VirtualFileSystem();
-			await loadFromDisk(vfs, dir, { gitignore: true });
+			const mirage = new VirtualFileSystem();
+			await loadFromDisk(mirage, dir, { gitignore: true });
 
-			expect(vfs.exists("/src/index.ts")).toBe(true);
-			expect(vfs.exists("/src/secret.txt")).toBe(false);
-			expect(vfs.exists("/secret.txt")).toBe(true);
+			expect(mirage.exists("/src/index.ts")).toBe(true);
+			expect(mirage.exists("/src/secret.txt")).toBe(false);
+			expect(mirage.exists("/secret.txt")).toBe(true);
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}
@@ -113,11 +113,11 @@ describe("loadFromDisk", () => {
 			fs.writeFileSync(nodePath.join(dir, "target.txt"), "real");
 			fs.symlinkSync("target.txt", nodePath.join(dir, "link.txt"));
 
-			const vfs = new VirtualFileSystem();
-			await loadFromDisk(vfs, dir);
+			const mirage = new VirtualFileSystem();
+			await loadFromDisk(mirage, dir);
 
-			expect(vfs.lstat("/link.txt").isSymlink()).toBe(true);
-			expect(vfs.readlink("/link.txt")).toBe("target.txt");
+			expect(mirage.lstat("/link.txt").isSymlink()).toBe(true);
+			expect(mirage.readlink("/link.txt")).toBe("target.txt");
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}
@@ -125,8 +125,8 @@ describe("loadFromDisk", () => {
 });
 
 describe("saveToDisk", () => {
-	test("writes a VFS subtree out to disk", async () => {
-		const vfs = new VirtualFileSystem({
+	test("writes a mirage subtree out to disk", async () => {
+		const mirage = new VirtualFileSystem({
 			files: {
 				"/workspace/package.json": `{"name":"x"}`,
 				"/workspace/src/index.ts": "export const x = 1;",
@@ -135,7 +135,7 @@ describe("saveToDisk", () => {
 
 		const dir = makeTempDir();
 		try {
-			await saveToDisk(vfs, "/workspace", dir);
+			await saveToDisk(mirage, "/workspace", dir);
 
 			expect(fs.readFileSync(nodePath.join(dir, "package.json"), "utf8")).toBe(`{"name":"x"}`);
 			expect(fs.readFileSync(nodePath.join(dir, "src/index.ts"), "utf8")).toBe(
@@ -153,9 +153,9 @@ describe("saveToDisk", () => {
 			fs.mkdirSync(nodePath.join(src, "sub"));
 			fs.writeFileSync(nodePath.join(src, "sub/a.txt"), "hello");
 
-			const vfs = new VirtualFileSystem();
-			await loadFromDisk(vfs, src);
-			await saveToDisk(vfs, "/", dst);
+			const mirage = new VirtualFileSystem();
+			await loadFromDisk(mirage, src);
+			await saveToDisk(mirage, "/", dst);
 
 			expect(fs.readFileSync(nodePath.join(dst, "sub/a.txt"), "utf8")).toBe("hello");
 		} finally {
@@ -169,8 +169,8 @@ describe("saveToDisk", () => {
 		try {
 			fs.writeFileSync(nodePath.join(dir, "stale.txt"), "old");
 
-			const vfs = new VirtualFileSystem({ files: { "/workspace/new.txt": "fresh" } });
-			await saveToDisk(vfs, "/workspace", dir, { clean: true });
+			const mirage = new VirtualFileSystem({ files: { "/workspace/new.txt": "fresh" } });
+			await saveToDisk(mirage, "/workspace", dir, { clean: true });
 
 			expect(fs.existsSync(nodePath.join(dir, "stale.txt"))).toBe(false);
 			expect(fs.readFileSync(nodePath.join(dir, "new.txt"), "utf8")).toBe("fresh");

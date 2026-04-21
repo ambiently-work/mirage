@@ -1,12 +1,12 @@
 import { globMatch } from "./glob.js";
-import type { NodeMeta, VfsNode } from "./node.js";
+import type { MirageNode, NodeMeta } from "./node.js";
 import { createDirectory, createFile, createSymlink } from "./node.js";
 import { basename, dirname, isAbsolute, join, normalize, resolve, split } from "./path.js";
-import type { IFileSystem, VfsStats } from "./types.js";
+import type { IFileSystem, MirageStats } from "./types.js";
 
 const MAX_SYMLINK_HOPS = 40;
 
-function makeStats(node: VfsNode): VfsStats {
+function makeStats(node: MirageNode): MirageStats {
 	const meta = node.meta;
 	const size = node.kind === "file" ? node.content.length : 0;
 	return {
@@ -66,7 +66,7 @@ export interface VirtualFileSystemOptions {
 const DEFAULT_DIRS = ["/tmp", "/root", "/home", "/usr/bin", "/bin", "/dev", "/var"];
 
 export class VirtualFileSystem implements IFileSystem {
-	private root: VfsNode;
+	private root: MirageNode;
 	private _cwd: string;
 	private _uid: number;
 	private _gid: number;
@@ -95,12 +95,12 @@ export class VirtualFileSystem implements IFileSystem {
 	}
 
 	/** Get direct access to the internal root node. Used by snapshot/restore. */
-	getRoot(): VfsNode {
+	getRoot(): MirageNode {
 		return this.root;
 	}
 
 	/** Replace the internal root node. Used by restore(). */
-	setRoot(root: VfsNode): void {
+	setRoot(root: MirageNode): void {
 		if (root.kind !== "directory") {
 			throw new Error("root node must be a directory");
 		}
@@ -127,11 +127,11 @@ export class VirtualFileSystem implements IFileSystem {
 	/**
 	 * Walk to a node by its absolute path, following symlinks.
 	 */
-	private resolveNode(absPath: string, followSymlinks = true): VfsNode | null {
+	private resolveNode(absPath: string, followSymlinks = true): MirageNode | null {
 		return this.walkPath(absPath, followSymlinks, 0);
 	}
 
-	private walkPath(absPath: string, followSymlinks: boolean, hops: number): VfsNode | null {
+	private walkPath(absPath: string, followSymlinks: boolean, hops: number): MirageNode | null {
 		if (hops > MAX_SYMLINK_HOPS) {
 			throw eloop(absPath);
 		}
@@ -140,7 +140,7 @@ export class VirtualFileSystem implements IFileSystem {
 		if (normalized === "/") return this.root;
 
 		const parts = split(normalized).filter((p) => p !== "/");
-		let current: VfsNode = this.root;
+		let current: MirageNode = this.root;
 
 		for (let i = 0; i < parts.length; i++) {
 			if (current.kind !== "directory") return null;
@@ -172,26 +172,26 @@ export class VirtualFileSystem implements IFileSystem {
 	/**
 	 * Walk to the parent directory and return [parentNode, childName].
 	 */
-	private resolveParent(absPath: string): [VfsNode & { kind: "directory" }, string] {
+	private resolveParent(absPath: string): [MirageNode & { kind: "directory" }, string] {
 		const dir = dirname(absPath);
 		const name = basename(absPath);
 		const parent = this.resolveNode(dir);
 		if (!parent) throw enoent(dir);
 		if (parent.kind !== "directory") throw enotdir(dir);
-		return [parent as VfsNode & { kind: "directory" }, name];
+		return [parent as MirageNode & { kind: "directory" }, name];
 	}
 
-	private checkRead(node: VfsNode, path: string): void {
+	private checkRead(node: MirageNode, path: string): void {
 		const perm = this.getEffectivePermBits(node);
 		if (!(perm & 4)) throw eacces(path);
 	}
 
-	private checkWrite(node: VfsNode, path: string): void {
+	private checkWrite(node: MirageNode, path: string): void {
 		const perm = this.getEffectivePermBits(node);
 		if (!(perm & 2)) throw eacces(path);
 	}
 
-	private getEffectivePermBits(node: VfsNode): number {
+	private getEffectivePermBits(node: MirageNode): number {
 		const mode = node.meta.mode;
 		if (this._uid === node.meta.uid) {
 			return (mode >> 6) & 7;
@@ -206,7 +206,7 @@ export class VirtualFileSystem implements IFileSystem {
 		if (absPath === "/") return;
 
 		const parts = split(absPath).filter((p) => p !== "/");
-		let current = this.root as VfsNode;
+		let current = this.root as MirageNode;
 
 		for (const part of parts) {
 			if (current.kind !== "directory") {
@@ -260,7 +260,7 @@ export class VirtualFileSystem implements IFileSystem {
 		return Array.from(node.children.keys()).sort();
 	}
 
-	stat(path: string): VfsStats {
+	stat(path: string): MirageStats {
 		const absPath = this.resolvePath(path);
 		const mounted = this.getMountedFs(absPath);
 		if (mounted) return mounted[0].stat(mounted[1]);
@@ -269,7 +269,7 @@ export class VirtualFileSystem implements IFileSystem {
 		return makeStats(node);
 	}
 
-	lstat(path: string): VfsStats {
+	lstat(path: string): MirageStats {
 		const absPath = this.resolvePath(path);
 		const mounted = this.getMountedFs(absPath);
 		if (mounted) return mounted[0].lstat(mounted[1]);
@@ -649,7 +649,7 @@ export class VirtualFileSystem implements IFileSystem {
 	 * directory nodes, symlinks, or file modes.
 	 *
 	 * For a full-fidelity snapshot (directories, symlinks, modes, ownership),
-	 * use the top-level `snapshot(fs)` helper from `@ambiently-work/vfs`.
+	 * use the top-level `snapshot(fs)` helper from `@ambiently-work/mirage`.
 	 */
 	snapshot(): Record<string, string> {
 		const result: Record<string, string> = {};
@@ -657,7 +657,7 @@ export class VirtualFileSystem implements IFileSystem {
 		return result;
 	}
 
-	private snapshotNode(path: string, node: VfsNode, result: Record<string, string>): void {
+	private snapshotNode(path: string, node: MirageNode, result: Record<string, string>): void {
 		if (node.kind === "file") {
 			result[path] = node.content;
 		} else if (node.kind === "directory") {

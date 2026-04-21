@@ -1,4 +1,4 @@
-export interface VfsStats {
+export interface MirageStats {
 	size: number;
 	mode: number;
 	uid: number;
@@ -14,8 +14,8 @@ export interface VfsStats {
 export interface IFileSystem {
 	readFile(path: string): string;
 	readDir(path: string): string[];
-	stat(path: string): VfsStats;
-	lstat(path: string): VfsStats;
+	stat(path: string): MirageStats;
+	lstat(path: string): MirageStats;
 	exists(path: string): boolean;
 	writeFile(path: string, content: string): void;
 	appendFile(path: string, content: string): void;

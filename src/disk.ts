@@ -1,9 +1,9 @@
 /**
- * Node-only helpers for loading a real directory into a mirage VFS, and
- * writing a VFS (or part of it) back out to disk.
+ * Node-only helpers for loading a real directory into a mirage, and
+ * writing a mirage (or part of it) back out to disk.
  *
- * This module is NOT imported from the main `@ambiently-work/vfs` entry
- * point — access it via `@ambiently-work/vfs/disk`. Keeps the core
+ * This module is NOT imported from the main `@ambiently-work/mirage` entry
+ * point — access it via `@ambiently-work/mirage/disk`. Keeps the core
  * package browser-safe (no `node:fs` in the import graph).
  */
 
@@ -14,8 +14,8 @@ import type { IFileSystem } from "./types.js";
 
 export interface LoadFromDiskOptions {
 	/**
-	 * Mount point inside the VFS to place files under. Defaults to `/`.
-	 * If the target directory does not exist in the VFS, it is created.
+	 * Mount point inside the mirage to place files under. Defaults to `/`.
+	 * If the target directory does not exist in the mirage, it is created.
 	 */
 	target?: string;
 	/**
@@ -68,18 +68,18 @@ function defaultFilter(relativePath: string): boolean {
 }
 
 /**
- * Walk a real directory and hydrate the VFS with its contents.
+ * Walk a real directory and hydrate the mirage with its contents.
  *
  * ```ts
- * import { VirtualFileSystem } from "@ambiently-work/vfs";
- * import { loadFromDisk } from "@ambiently-work/vfs/disk";
+ * import { VirtualFileSystem } from "@ambiently-work/mirage";
+ * import { loadFromDisk } from "@ambiently-work/mirage/disk";
  *
- * const vfs = new VirtualFileSystem();
- * await loadFromDisk(vfs, "/path/to/repo", { target: "/workspace" });
+ * const mirage = new VirtualFileSystem();
+ * await loadFromDisk(mirage, "/path/to/repo", { target: "/workspace" });
  * ```
  */
 export async function loadFromDisk(
-	vfs: IFileSystem,
+	mirage: IFileSystem,
 	sourcePath: string,
 	options?: LoadFromDiskOptions,
 ): Promise<void> {
@@ -96,15 +96,15 @@ export async function loadFromDisk(
 
 	const ignore = await buildIgnore(absSource, options?.gitignore);
 
-	ensureDir(vfs, target);
+	ensureDir(mirage, target);
 
-	await walkDir(absSource, "", vfs, target, filter, followSymlinks, maxFileBytes, ignore);
+	await walkDir(absSource, "", mirage, target, filter, followSymlinks, maxFileBytes, ignore);
 }
 
 async function walkDir(
 	sourceRoot: string,
 	relative: string,
-	vfs: IFileSystem,
+	mirage: IFileSystem,
 	target: string,
 	filter: (relativePath: string, isDirectory: boolean) => boolean,
 	followSymlinks: boolean,
@@ -126,13 +126,13 @@ async function walkDir(
 
 	for (const entry of entries) {
 		const childRelative = relative === "" ? entry.name : `${relative}/${entry.name}`;
-		const vfsPath = target === "/" ? `/${childRelative}` : `${target}/${childRelative}`;
+		const miragePath = target === "/" ? `/${childRelative}` : `${target}/${childRelative}`;
 
 		if (entry.isSymbolicLink() && !followSymlinks) {
 			if (!filter(childRelative, false)) continue;
 			if (ignore?.ignores(childRelative, false)) continue;
 			const linkTarget = await fs.promises.readlink(nodePath.join(absDir, entry.name));
-			vfs.symlink(linkTarget, vfsPath);
+			mirage.symlink(linkTarget, miragePath);
 			continue;
 		}
 
@@ -144,11 +144,11 @@ async function walkDir(
 		if (stats.isDirectory()) {
 			if (!filter(childRelative, true)) continue;
 			if (ignore?.ignores(childRelative, true)) continue;
-			vfs.mkdir(vfsPath, { recursive: true });
+			mirage.mkdir(miragePath, { recursive: true });
 			await walkDir(
 				sourceRoot,
 				childRelative,
-				vfs,
+				mirage,
 				target,
 				filter,
 				followSymlinks,
@@ -168,9 +168,9 @@ async function walkDir(
 				);
 			}
 			const content = await fs.promises.readFile(absPath, "utf8");
-			vfs.writeFile(vfsPath, content);
+			mirage.writeFile(miragePath, content);
 			try {
-				vfs.chmod(vfsPath, stats.mode & 0o777);
+				mirage.chmod(miragePath, stats.mode & 0o777);
 			} catch {
 				// Adapter may not support chmod — that's fine.
 			}
@@ -211,14 +211,14 @@ export interface SaveToDiskOptions {
 }
 
 /**
- * Write the contents of a VFS subtree to a real directory on disk.
+ * Write the contents of a mirage subtree to a real directory on disk.
  *
  * ```ts
- * await saveToDisk(vfs, "/workspace", "/tmp/snapshot");
+ * await saveToDisk(mirage, "/workspace", "/tmp/snapshot");
  * ```
  */
 export async function saveToDisk(
-	vfs: IFileSystem,
+	mirage: IFileSystem,
 	sourcePath: string,
 	targetPath: string,
 	options?: SaveToDiskOptions,
@@ -235,33 +235,37 @@ export async function saveToDisk(
 	}
 
 	const src = normalizeTarget(sourcePath);
-	if (!vfs.exists(src)) {
-		throw new Error(`saveToDisk: VFS path does not exist: ${src}`);
+	if (!mirage.exists(src)) {
+		throw new Error(`saveToDisk: mirage path does not exist: ${src}`);
 	}
-	const srcStat = vfs.stat(src);
+	const srcStat = mirage.stat(src);
 	if (!srcStat.isDirectory()) {
-		throw new Error(`saveToDisk: VFS path is not a directory: ${src}`);
+		throw new Error(`saveToDisk: mirage path is not a directory: ${src}`);
 	}
 
-	await writeVfsDir(vfs, src, absTarget);
+	await writeMirageDir(mirage, src, absTarget);
 }
 
-async function writeVfsDir(vfs: IFileSystem, vfsDir: string, absDir: string): Promise<void> {
+async function writeMirageDir(
+	mirage: IFileSystem,
+	mirageDir: string,
+	absDir: string,
+): Promise<void> {
 	await fs.promises.mkdir(absDir, { recursive: true });
-	const entries = vfs.readDir(vfsDir);
+	const entries = mirage.readDir(mirageDir);
 
 	for (const name of entries) {
-		const childVfs = vfsDir === "/" ? `/${name}` : `${vfsDir}/${name}`;
+		const childMirage = mirageDir === "/" ? `/${name}` : `${mirageDir}/${name}`;
 		const childAbs = nodePath.join(absDir, name);
-		const stat = vfs.lstat(childVfs);
+		const stat = mirage.lstat(childMirage);
 
 		if (stat.isDirectory()) {
-			await writeVfsDir(vfs, childVfs, childAbs);
+			await writeMirageDir(mirage, childMirage, childAbs);
 			continue;
 		}
 
 		if (stat.isSymlink()) {
-			const target = vfs.readlink(childVfs);
+			const target = mirage.readlink(childMirage);
 			try {
 				await fs.promises.symlink(target, childAbs);
 			} catch (err) {
@@ -273,7 +277,7 @@ async function writeVfsDir(vfs: IFileSystem, vfsDir: string, absDir: string): Pr
 		}
 
 		if (stat.isFile()) {
-			const content = vfs.readFile(childVfs);
+			const content = mirage.readFile(childMirage);
 			await fs.promises.writeFile(childAbs, content, "utf8");
 			try {
 				await fs.promises.chmod(childAbs, stat.mode & 0o777);
@@ -284,13 +288,13 @@ async function writeVfsDir(vfs: IFileSystem, vfsDir: string, absDir: string): Pr
 	}
 }
 
-function ensureDir(vfs: IFileSystem, path: string): void {
+function ensureDir(mirage: IFileSystem, path: string): void {
 	if (path === "/" || path === "") return;
-	if (!vfs.exists(path)) {
-		vfs.mkdir(path, { recursive: true });
+	if (!mirage.exists(path)) {
+		mirage.mkdir(path, { recursive: true });
 		return;
 	}
-	const stat = vfs.stat(path);
+	const stat = mirage.stat(path);
 	if (!stat.isDirectory()) {
 		throw new Error(`target exists but is not a directory: ${path}`);
 	}

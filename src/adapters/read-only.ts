@@ -1,4 +1,4 @@
-import type { IFileSystem, VfsStats } from "../types.js";
+import type { IFileSystem, MirageStats } from "../types.js";
 
 /**
  * Wraps any IFileSystem and makes it read-only.
@@ -15,11 +15,11 @@ export class ReadOnlyFileSystem implements IFileSystem {
 		return this.inner.readDir(path);
 	}
 
-	stat(path: string): VfsStats {
+	stat(path: string): MirageStats {
 		return this.inner.stat(path);
 	}
 
-	lstat(path: string): VfsStats {
+	lstat(path: string): MirageStats {
 		return this.inner.lstat(path);
 	}
 

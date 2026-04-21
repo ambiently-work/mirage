@@ -1,4 +1,4 @@
-import type { IFileSystem, VfsStats } from "../types.js";
+import type { IFileSystem, MirageStats } from "../types.js";
 
 /**
  * Union/overlay filesystem. Reads cascade through layers (first match wins).
@@ -62,7 +62,7 @@ export class LayeredFileSystem implements IFileSystem {
 		return [...entries].sort();
 	}
 
-	stat(path: string): VfsStats {
+	stat(path: string): MirageStats {
 		for (const layer of this.layers) {
 			try {
 				if (layer.exists(path)) {
@@ -73,7 +73,7 @@ export class LayeredFileSystem implements IFileSystem {
 		throw new Error(`ENOENT: no such file or directory: ${path}`);
 	}
 
-	lstat(path: string): VfsStats {
+	lstat(path: string): MirageStats {
 		for (const layer of this.layers) {
 			try {
 				if (layer.exists(path)) {
