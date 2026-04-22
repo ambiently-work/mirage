@@ -1,6 +1,6 @@
 {
 	"name": "@ambiently-work/mirage",
-	"version": "0.0.1",
+	"version": "0.1.0",
 	"description": "Mirage — a pluggable in-process virtual filesystem. Pure-JS, browser and server, with snapshot/restore, layered overlays, and disk/repo loaders.",
 	"license": "MIT",
 	"author": "ambiently",
