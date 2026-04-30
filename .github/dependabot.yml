@@ -1,0 +1,63 @@
+# Grouped Dependabot updates.
+# Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore
+      include: scope
+    # Mirror the org's Renovate `minimumReleaseAge: 7 days`.
+    cooldown:
+      default-days: 7
+      include:
+        - "*"
+    groups:
+      tooling:
+        applies-to: version-updates
+        patterns:
+          - "@biomejs/*"
+          - "typescript"
+          - "@types/*"
+        update-types:
+          - minor
+          - patch
+      minor-and-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Amsterdam
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: ci
+      include: scope
+    cooldown:
+      default-days: 7
+      include:
+        - "*"
+    groups:
+      actions:
+        applies-to: version-updates
+        patterns:
+          - "*"
