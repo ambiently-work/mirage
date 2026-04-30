@@ -29,6 +29,7 @@ updates:
           - "typescript"
           - "@types/*"
         update-types:
+          - major
           - minor
           - patch
       minor-and-patch:
