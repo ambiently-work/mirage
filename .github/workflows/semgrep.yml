@@ -22,7 +22,7 @@ jobs:
       contents: read
       security-events: write
     container:
-      image: semgrep/semgrep:1.97.0
+      image: semgrep/semgrep:1.161.0@sha256:326e5f41cc972bb423b764a14febbb62bbad29ee1c01820805d077dd868fea48
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
@@ -38,7 +38,7 @@ jobs:
             p/security-audit
 
       - name: Upload Semgrep SARIF
-        uses: github/codeql-action/upload-sarif@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4
+        uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7 # v4
         if: always()
         with:
           sarif_file: semgrep.sarif

@@ -22,4 +22,4 @@ jobs:
       - name: Run typos
         # Maintainer-published action; very low false-positive rate.
         # Add overrides in .typos.toml if needed.
-        uses: crate-ci/typos@8bf453428eedb95b86dcc688df5c9f42f32c1d02 # v1.34.0
+        uses: crate-ci/typos@7c572958218557a3272c2d6719629443b5cc26fd # v1.45.2
