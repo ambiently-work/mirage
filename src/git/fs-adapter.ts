@@ -228,18 +228,26 @@ function adaptStat(
 	routedPath: string,
 ): FsStat {
 	const type: FsStat["type"] = s.isDirectory() ? "dir" : s.isSymlink() ? "symlink" : "file";
-	// Iso-git keys its workdir-vs-index stat cache by ino. With a real fs ino
-	// is stable across writes; here mirage is in-memory so we synthesize one
-	// from `path-hash ^ rev`. The rev component bumps on every write, so two
-	// modifications in the same wall-clock second still produce different inos
-	// and iso-git correctly invalidates the cache and rehashes the file.
-	const ino = simpleHash(routedPath) ^ (s.rev | 0);
+	// Iso-git keys its workdir-vs-index stat cache by ino + mtime + size + mode.
+	// In-memory mirage has no real ino, so we synthesize one from
+	// `path-hash ^ rev` — and we ALSO offset mtime by `rev` whole seconds.
+	//
+	// Two reasons for the dual encoding:
+	//   1. On Linux/macOS, iso-git uses `trustino = true` and the ino bump
+	//      alone invalidates the cache.
+	//   2. On Windows, iso-git uses `trustino = false` (real Windows fs is
+	//      racy on inode reuse) and ignores ino entirely. The mtime offset
+	//      ensures `mtimeSeconds` always differs across writes regardless of
+	//      sub-second wall-clock resolution.
+	const rev = s.rev | 0;
+	const ino = simpleHash(routedPath) ^ rev;
+	const mtimeMs = s.mtime + rev * 1000;
 	return {
 		type,
 		mode: s.mode,
 		size: s.size,
 		ino,
-		mtimeMs: s.mtime,
+		mtimeMs,
 		ctimeMs: s.ctime,
 		uid: s.uid,
 		gid: s.gid,
