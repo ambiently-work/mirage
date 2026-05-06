@@ -1,0 +1,45 @@
+name: Semgrep
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 6 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: SAST (second-opinion)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    container:
+      image: semgrep/semgrep:1.97.0
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Run Semgrep
+        # `semgrep ci` runs without a Semgrep AppSec token — it uses the rules
+        # listed in SEMGREP_RULES. Public OSS rulesets only.
+        run: semgrep ci --sarif --output=semgrep.sarif
+        env:
+          SEMGREP_RULES: >-
+            p/javascript
+            p/typescript
+            p/owasp-top-ten
+            p/security-audit
+
+      - name: Upload Semgrep SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep

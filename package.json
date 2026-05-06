@@ -62,6 +62,7 @@
 		"knip": "knip",
 		"audit": "bun audit --prod",
 		"clean": "rm -rf dist tsconfig.tsbuildinfo",
+		"prepare": "lefthook install || true",
 		"prepublishOnly": "bun run build"
 	},
 	"devDependencies": {
@@ -70,6 +71,7 @@
 		"@commitlint/config-conventional": "^20.5.3",
 		"@types/bun": "1.3.13",
 		"knip": "^6.11.0",
+		"lefthook": "^2.1.6",
 		"typescript": "6.0.3"
 	}
 }

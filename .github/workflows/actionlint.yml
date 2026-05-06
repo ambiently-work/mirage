@@ -1,0 +1,33 @@
+name: actionlint
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Lint workflow YAML
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Run actionlint
+        # Uses the official actionlint Docker image so we don't need to download
+        # a script over the network at job-time. Pinned to a specific tag.
+        uses: docker://rhysd/actionlint:1.7.7
+        with:
+          args: -color
