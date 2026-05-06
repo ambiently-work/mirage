@@ -33,6 +33,9 @@ function makeRepo(): { dir: string; cleanup: () => void } {
 	git(dir, "config", "user.email", "test@example.com");
 	git(dir, "config", "user.name", "Test");
 	git(dir, "config", "commit.gpgsign", "false");
+	// Keep blobs byte-for-byte: prevents Windows runners' default
+	// `core.autocrlf=true` from rewriting \n → \r\n on add or checkout.
+	git(dir, "config", "core.autocrlf", "false");
 	fs.writeFileSync(nodePath.join(dir, "README.md"), "# Hello\n");
 	fs.mkdirSync(nodePath.join(dir, "src"));
 	fs.writeFileSync(nodePath.join(dir, "src/index.ts"), "export const x = 1;\n");
