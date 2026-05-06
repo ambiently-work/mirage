@@ -22,32 +22,35 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    env:
+      # Bumping this is the only edit needed to upgrade Trivy.
+      TRIVY_VERSION: "0.70.0"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - name: Run Trivy filesystem scan
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          format: sarif
-          output: trivy-fs.sarif
-          severity: CRITICAL,HIGH,MEDIUM
-          # Don't fail the job on findings — we let SARIF upload + the
-          # GitHub Security tab surface them. Use `dependency-review` and
-          # `bun audit` for hard gating.
-          exit-code: "0"
-          ignore-unfixed: true
+      - name: Install Trivy
+        run: |
+          set -euo pipefail
+          url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSL "$url" | sudo tar xzf - -C /usr/local/bin trivy
+          trivy --version
 
-      - name: Run Trivy config (IaC / workflow misconfig) scan
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
-        with:
-          scan-type: config
-          scan-ref: .
-          format: sarif
-          output: trivy-config.sarif
-          severity: CRITICAL,HIGH,MEDIUM
-          exit-code: "0"
+      - name: Trivy filesystem scan (CVEs in deps)
+        run: |
+          trivy fs . \
+            --format sarif \
+            --output trivy-fs.sarif \
+            --severity CRITICAL,HIGH,MEDIUM \
+            --ignore-unfixed \
+            --exit-code 0
+
+      - name: Trivy config scan (IaC / workflow misconfig)
+        run: |
+          trivy config . \
+            --format sarif \
+            --output trivy-config.sarif \
+            --severity CRITICAL,HIGH,MEDIUM \
+            --exit-code 0
 
       - name: Upload filesystem SARIF
         uses: github/codeql-action/upload-sarif@53e96ec3b35fce51c141c0d6f0e31028a448722d # v3

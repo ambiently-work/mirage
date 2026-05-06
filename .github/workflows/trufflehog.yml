@@ -19,16 +19,29 @@ jobs:
   scan:
     name: Scan git history for verified secrets
     runs-on: ubuntu-latest
+    env:
+      # Bumping this is the only edit needed to upgrade TruffleHog.
+      TRUFFLEHOG_VERSION: "3.95.2"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          # Full history so TruffleHog can scan every commit, not just the tip.
+          # Full history so the scan can walk every commit, not just the tip.
           fetch-depth: 0
 
-      - name: Run TruffleHog
-        uses: trufflesecurity/trufflehog@17456f8c7d042d8c82c9a8ca9e937231f9f42e26 # v3.95.2
-        with:
-          # `verified` = TruffleHog confirmed the secret is live by hitting the provider.
-          # `unknown` = matched a pattern but provider couldn't be reached to verify.
-          # We surface both; unverified-and-failed-to-check is signal too.
-          extra_args: --results=verified,unknown
+      - name: Install TruffleHog
+        run: |
+          set -euo pipefail
+          url="https://github.com/trufflesecurity/trufflehog/releases/download/v${TRUFFLEHOG_VERSION}/trufflehog_${TRUFFLEHOG_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL "$url" | sudo tar xzf - -C /usr/local/bin trufflehog
+          trufflehog --version
+
+      - name: Scan repository
+        # `verified` = TruffleHog confirmed the secret is live by hitting the
+        # provider. `unknown` = matched a pattern but provider couldn't be
+        # reached to verify. We surface both; failing-to-verify is still signal.
+        # `--fail` exits non-zero on any finding so CI gates the merge.
+        run: |
+          trufflehog git file://. \
+            --results=verified,unknown \
+            --fail \
+            --no-update
