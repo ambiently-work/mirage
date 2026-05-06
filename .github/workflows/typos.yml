@@ -16,10 +16,22 @@ jobs:
   typos:
     name: Spell-check
     runs-on: ubuntu-latest
+    env:
+      # Bumping this is the only edit needed to upgrade typos.
+      # We install the binary directly because `crate-ci/*` isn't on this
+      # repo's actions allowlist (only github-owned, verified-creator, and
+      # the explicitly-listed patterns are accepted).
+      TYPOS_VERSION: "1.34.0"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
+      - name: Install typos
+        run: |
+          set -euo pipefail
+          url="https://github.com/crate-ci/typos/releases/download/v${TYPOS_VERSION}/typos-v${TYPOS_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          curl -fsSL "$url" -o typos.tar.gz
+          tar xzf typos.tar.gz ./typos
+          ./typos --version
+
       - name: Run typos
-        # Maintainer-published action; very low false-positive rate.
-        # Add overrides in .typos.toml if needed.
-        uses: crate-ci/typos@8bf453428eedb95b86dcc688df5c9f42f32c1d02 # v1.34.0
+        run: ./typos
