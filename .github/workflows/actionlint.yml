@@ -22,19 +22,13 @@ jobs:
   actionlint:
     name: Lint workflow YAML
     runs-on: ubuntu-latest
-    env:
-      # Bumping this version is the only edit needed to upgrade actionlint.
-      ACTIONLINT_VERSION: "1.7.7"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - name: Install actionlint
-        run: |
-          set -euo pipefail
-          url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          curl -fsSL "$url" -o actionlint.tar.gz
-          tar xzf actionlint.tar.gz actionlint
-          ./actionlint --version
-
       - name: Run actionlint
-        run: ./actionlint -color
+        # Maintainer's own Docker image (rhysd publishes both the binary and
+        # this image). Pinned to a specific tag plus its SHA-256 digest so
+        # nothing changes under us between runs.
+        uses: docker://rhysd/actionlint:1.7.7@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
+        with:
+          args: -color
