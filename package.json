@@ -59,12 +59,17 @@
 		"test": "bun test",
 		"check": "biome check .",
 		"format": "biome format --write .",
+		"knip": "knip",
+		"audit": "bun audit --prod",
 		"clean": "rm -rf dist tsconfig.tsbuildinfo",
 		"prepublishOnly": "bun run build"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.14",
+		"@commitlint/cli": "^20.5.3",
+		"@commitlint/config-conventional": "^20.5.3",
 		"@types/bun": "1.3.13",
+		"knip": "^6.11.0",
 		"typescript": "6.0.3"
 	}
 }
