@@ -138,3 +138,66 @@ describe("VirtualFileSystem: snapshot (legacy flat)", () => {
 		expect(fs.snapshot()).toEqual({ "/a.txt": "x", "/b/c.txt": "y" });
 	});
 });
+
+describe("VirtualFileSystem: binary content (readFileBytes / writeFileBytes)", () => {
+	test("round-trips arbitrary bytes including 0x00 and 0xFF", () => {
+		const fs = new VirtualFileSystem({ bare: true });
+		const bytes = new Uint8Array([0x00, 0x01, 0x02, 0xff, 0xfe, 0xfd, 0x80]);
+		fs.writeFileBytes("/blob.bin", bytes);
+		const out = fs.readFileBytes("/blob.bin");
+		expect(Array.from(out)).toEqual(Array.from(bytes));
+	});
+
+	test("size reflects the byte length, not a UTF-8 string length", () => {
+		const fs = new VirtualFileSystem({ bare: true });
+		// Three bytes, but a single multi-byte UTF-8 codepoint when decoded.
+		fs.writeFileBytes("/x", new Uint8Array([0xe2, 0x98, 0x83]));
+		expect(fs.stat("/x").size).toBe(3);
+	});
+
+	test("writeFile / readFile are UTF-8-encoded shortcuts over the bytes API", () => {
+		const fs = new VirtualFileSystem({ bare: true });
+		fs.writeFile("/a", "héllo");
+		const bytes = fs.readFileBytes("/a");
+		expect(bytes.length).toBe(6); // "h" + "é" (2 bytes) + "llo" = 6
+		expect(fs.readFile("/a")).toBe("héllo");
+	});
+
+	test("constructor `files` accepts both string and Uint8Array values", () => {
+		const fs = new VirtualFileSystem({
+			bare: true,
+			files: {
+				"/a.txt": "text",
+				"/b.bin": new Uint8Array([1, 2, 3]),
+			},
+		});
+		expect(fs.readFile("/a.txt")).toBe("text");
+		expect(Array.from(fs.readFileBytes("/b.bin"))).toEqual([1, 2, 3]);
+	});
+});
+
+describe("VirtualFileSystem: rev counter on stats", () => {
+	test("rev starts at 0 and increments on every write", () => {
+		const fs = new VirtualFileSystem({ bare: true });
+		fs.writeFile("/a.txt", "v1");
+		const r1 = fs.stat("/a.txt").rev;
+		fs.writeFile("/a.txt", "v2");
+		const r2 = fs.stat("/a.txt").rev;
+		fs.writeFileBytes("/a.txt", new Uint8Array([3]));
+		const r3 = fs.stat("/a.txt").rev;
+		// First write creates the file (rev=1 after touchMeta runs once).
+		expect(r2).toBeGreaterThan(r1);
+		expect(r3).toBeGreaterThan(r2);
+	});
+
+	test("rev is per-file (writing /a does not bump /b)", () => {
+		const fs = new VirtualFileSystem({ bare: true });
+		fs.writeFile("/a.txt", "x");
+		fs.writeFile("/b.txt", "y");
+		const aRev = fs.stat("/a.txt").rev;
+		const bRev = fs.stat("/b.txt").rev;
+		fs.writeFile("/a.txt", "x2");
+		expect(fs.stat("/a.txt").rev).toBeGreaterThan(aRev);
+		expect(fs.stat("/b.txt").rev).toBe(bRev);
+	});
+});

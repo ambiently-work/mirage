@@ -1,6 +1,6 @@
 import { globMatch } from "./glob.js";
 import type { MirageNode, NodeMeta } from "./node.js";
-import { createDirectory, createFile, createSymlink } from "./node.js";
+import { createDirectory, createFile, createSymlink, decodeUtf8, encodeUtf8 } from "./node.js";
 import { basename, dirname, isAbsolute, join, normalize, resolve, split } from "./path.js";
 import type { IFileSystem, MirageStats } from "./types.js";
 
@@ -17,6 +17,7 @@ function makeStats(node: MirageNode): MirageStats {
 		atime: meta.atime,
 		mtime: meta.mtime,
 		ctime: meta.ctime,
+		rev: meta.rev,
 		isFile: () => node.kind === "file",
 		isDirectory: () => node.kind === "directory",
 		isSymlink: () => node.kind === "symlink",
@@ -52,7 +53,7 @@ function enotempty(path: string): Error {
 }
 
 export interface VirtualFileSystemOptions {
-	files?: Record<string, string>;
+	files?: Record<string, string | Uint8Array>;
 	cwd?: string;
 	uid?: number;
 	gid?: number;
@@ -89,7 +90,11 @@ export class VirtualFileSystem implements IFileSystem {
 				const absPath = this.resolvePath(path);
 				const dir = dirname(absPath);
 				this.mkdirRecursive(dir);
-				this.writeFile(absPath, content);
+				if (typeof content === "string") {
+					this.writeFile(absPath, content);
+				} else {
+					this.writeFileBytes(absPath, content);
+				}
 			}
 		}
 	}
@@ -233,12 +238,17 @@ export class VirtualFileSystem implements IFileSystem {
 	private touchMeta(meta: NodeMeta): void {
 		meta.mtime = Date.now();
 		meta.ctime = Date.now();
+		meta.rev = (meta.rev ?? 0) + 1;
 	}
 
 	readFile(path: string): string {
+		return decodeUtf8(this.readFileBytes(path));
+	}
+
+	readFileBytes(path: string): Uint8Array {
 		const absPath = this.resolvePath(path);
 		const mounted = this.getMountedFs(absPath);
-		if (mounted) return mounted[0].readFile(mounted[1]);
+		if (mounted) return mounted[0].readFileBytes(mounted[1]);
 		const node = this.resolveNode(absPath);
 		if (!node) throw enoent(absPath);
 		if (node.kind === "directory") throw eisdir(absPath);
@@ -290,10 +300,14 @@ export class VirtualFileSystem implements IFileSystem {
 	}
 
 	writeFile(path: string, content: string): void {
+		this.writeFileBytes(path, encodeUtf8(content));
+	}
+
+	writeFileBytes(path: string, content: Uint8Array): void {
 		const absPath = this.resolvePath(path);
 		const mounted = this.getMountedFs(absPath);
 		if (mounted) {
-			mounted[0].writeFile(mounted[1], content);
+			mounted[0].writeFileBytes(mounted[1], content);
 			return;
 		}
 		const [parent, name] = this.resolveParent(absPath);
@@ -414,7 +428,7 @@ export class VirtualFileSystem implements IFileSystem {
 			mountedSrc[0].cp(mountedSrc[1], mountedDest[1], options);
 			return;
 		}
-		const content = this.readFile(absSrc);
+		const content = this.readFileBytes(absSrc);
 		const destStat = (() => {
 			try {
 				return this.stat(absDest);
@@ -423,9 +437,9 @@ export class VirtualFileSystem implements IFileSystem {
 			}
 		})();
 		if (destStat?.isDirectory()) {
-			this.writeFile(join(absDest, basename(absSrc)), content);
+			this.writeFileBytes(join(absDest, basename(absSrc)), content);
 		} else {
-			this.writeFile(absDest, content);
+			this.writeFileBytes(absDest, content);
 		}
 	}
 
@@ -659,7 +673,7 @@ export class VirtualFileSystem implements IFileSystem {
 
 	private snapshotNode(path: string, node: MirageNode, result: Record<string, string>): void {
 		if (node.kind === "file") {
-			result[path] = node.content;
+			result[path] = decodeUtf8(node.content);
 		} else if (node.kind === "directory") {
 			for (const [name, child] of node.children) {
 				const childPath = path === "/" ? `/${name}` : `${path}/${name}`;

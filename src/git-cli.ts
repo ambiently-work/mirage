@@ -399,8 +399,8 @@ async function hydrateFromList(
 						`Tighten the filter or raise maxFileBytes.`,
 				);
 			}
-			const content = await fs.promises.readFile(absPath, "utf8");
-			mirage.writeFile(miragePath, content);
+			const content = await fs.promises.readFile(absPath);
+			mirage.writeFileBytes(miragePath, new Uint8Array(content));
 			try {
 				mirage.chmod(miragePath, stat.mode & 0o777);
 			} catch {

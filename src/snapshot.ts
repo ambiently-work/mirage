@@ -1,23 +1,35 @@
 import { VirtualFileSystem } from "./filesystem.js";
 import type { MirageNode, NodeMeta } from "./node.js";
+import { encodeUtf8 } from "./node.js";
 
 /**
- * Full-fidelity snapshot of a {@link VirtualFileSystem}. Unlike
- * `VirtualFileSystem#snapshot()` (which returns a flat `Record<string,string>`
- * of file contents only), this captures the entire tree — directories,
- * symlinks, file modes, ownership, and timestamps — in a JSON-serializable
- * form suitable for "put away and restore later."
+ * Full-fidelity snapshot of a {@link VirtualFileSystem}. Captures the entire
+ * tree — directories, symlinks, file modes, ownership, and timestamps — in a
+ * JSON-serializable form suitable for "put away and restore later."
  *
  * The schema is stable across minor versions; breaking changes bump `version`.
+ *
+ * Since v2 file contents are stored byte-exact. Plain UTF-8 text uses
+ * `{ encoding: "utf8", content: string }`; everything else falls back to
+ * `{ encoding: "base64", content: string }`. Older `version: 1` snapshots
+ * (UTF-8-only text content) are still accepted by `restore()`.
  */
 export interface Snapshot {
-	version: 1;
+	version: 1 | 2;
 	createdAt: number;
 	root: SnapshotNode;
 }
 
+export type FileEncoding = "utf8" | "base64";
+
 export type SnapshotNode =
-	| { kind: "file"; content: string; meta: NodeMeta }
+	| {
+			kind: "file";
+			content: string;
+			/** Defaults to "utf8" for legacy version-1 snapshots. */
+			encoding?: FileEncoding;
+			meta: NodeMeta;
+	  }
 	| { kind: "directory"; children: Record<string, SnapshotNode>; meta: NodeMeta }
 	| { kind: "symlink"; target: string; meta: NodeMeta };
 
@@ -30,7 +42,7 @@ export type SnapshotNode =
  */
 export function snapshot(fs: VirtualFileSystem): Snapshot {
 	return {
-		version: 1,
+		version: 2,
 		createdAt: Date.now(),
 		root: nodeToSnapshot(fs.getRoot()),
 	};
@@ -48,7 +60,7 @@ export function restore(
 	snap: Snapshot,
 	options?: { cwd?: string; uid?: number; gid?: number },
 ): VirtualFileSystem {
-	if (snap.version !== 1) {
+	if (snap.version !== 1 && snap.version !== 2) {
 		throw new Error(`unsupported snapshot version: ${snap.version}`);
 	}
 	if (snap.root.kind !== "directory") {
@@ -61,7 +73,21 @@ export function restore(
 
 function nodeToSnapshot(node: MirageNode): SnapshotNode {
 	if (node.kind === "file") {
-		return { kind: "file", content: node.content, meta: { ...node.meta } };
+		const decoded = tryDecodeUtf8(node.content);
+		if (decoded !== null) {
+			return {
+				kind: "file",
+				encoding: "utf8",
+				content: decoded,
+				meta: { ...node.meta },
+			};
+		}
+		return {
+			kind: "file",
+			encoding: "base64",
+			content: bytesToBase64(node.content),
+			meta: { ...node.meta },
+		};
 	}
 	if (node.kind === "symlink") {
 		return { kind: "symlink", target: node.target, meta: { ...node.meta } };
@@ -75,7 +101,9 @@ function nodeToSnapshot(node: MirageNode): SnapshotNode {
 
 function snapshotToNode(snap: SnapshotNode): MirageNode {
 	if (snap.kind === "file") {
-		return { kind: "file", content: snap.content, meta: { ...snap.meta } };
+		const encoding = snap.encoding ?? "utf8";
+		const bytes = encoding === "base64" ? base64ToBytes(snap.content) : encodeUtf8(snap.content);
+		return { kind: "file", content: bytes, meta: { ...snap.meta } };
 	}
 	if (snap.kind === "symlink") {
 		return { kind: "symlink", target: snap.target, meta: { ...snap.meta } };
@@ -85,4 +113,44 @@ function snapshotToNode(snap: SnapshotNode): MirageNode {
 		children.set(name, snapshotToNode(child));
 	}
 	return { kind: "directory", children, meta: { ...snap.meta } };
+}
+
+/** Round-trip-safe UTF-8 decode. Returns null if the bytes aren't valid UTF-8. */
+function tryDecodeUtf8(bytes: Uint8Array): string | null {
+	try {
+		const dec = new TextDecoder("utf-8", { fatal: true });
+		const text = dec.decode(bytes);
+		// Round-trip check: if re-encoding doesn't match the input, the text
+		// contained replacement characters — fall back to base64.
+		const reencoded = encodeUtf8(text);
+		if (reencoded.length !== bytes.length) return null;
+		for (let i = 0; i < bytes.length; i++) {
+			if (reencoded[i] !== bytes[i]) return null;
+		}
+		return text;
+	} catch {
+		return null;
+	}
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+	if (typeof Buffer !== "undefined") {
+		return Buffer.from(bytes).toString("base64");
+	}
+	// Browser fallback.
+	let s = "";
+	for (let i = 0; i < bytes.length; i++) {
+		s += String.fromCharCode(bytes[i] as number);
+	}
+	return btoa(s);
+}
+
+function base64ToBytes(s: string): Uint8Array {
+	if (typeof Buffer !== "undefined") {
+		return new Uint8Array(Buffer.from(s, "base64"));
+	}
+	const bin = atob(s);
+	const out = new Uint8Array(bin.length);
+	for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+	return out;
 }

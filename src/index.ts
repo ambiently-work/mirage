@@ -32,6 +32,12 @@ export {
 	split,
 } from "./path.js";
 // Snapshot / restore (full-fidelity — directories, symlinks, modes)
-export { restore, type Snapshot, type SnapshotNode, snapshot } from "./snapshot.js";
+export {
+	type FileEncoding,
+	restore,
+	type Snapshot,
+	type SnapshotNode,
+	snapshot,
+} from "./snapshot.js";
 export type { IFileSystem, MirageStats } from "./types.js";
 export type { WasmGlobModule } from "./wasm.js";

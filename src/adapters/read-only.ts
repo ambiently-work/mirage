@@ -11,6 +11,10 @@ export class ReadOnlyFileSystem implements IFileSystem {
 		return this.inner.readFile(path);
 	}
 
+	readFileBytes(path: string): Uint8Array {
+		return this.inner.readFileBytes(path);
+	}
+
 	readDir(path: string): string[] {
 		return this.inner.readDir(path);
 	}
@@ -40,6 +44,10 @@ export class ReadOnlyFileSystem implements IFileSystem {
 	}
 
 	writeFile(): void {
+		throw new Error("EROFS: read-only file system");
+	}
+
+	writeFileBytes(): void {
 		throw new Error("EROFS: read-only file system");
 	}
 
