@@ -1,0 +1,44 @@
+name: actionlint
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Lint workflow YAML
+    runs-on: ubuntu-latest
+    env:
+      # Bumping this is the only edit needed to upgrade actionlint.
+      # The maintainer doesn't publish a first-party GitHub Action, and
+      # the `docker://rhysd/actionlint` image is rejected by this repo's
+      # actions allowlist — so we install the binary from the pinned
+      # release URL instead.
+      ACTIONLINT_VERSION: "1.7.7"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL "$url" -o actionlint.tar.gz
+          tar xzf actionlint.tar.gz actionlint
+          ./actionlint --version
+
+      - name: Run actionlint
+        run: ./actionlint -color

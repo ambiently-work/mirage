@@ -1,0 +1,36 @@
+# Lefthook config — local git hooks.
+#
+# Auto-installed by `bun install` (see the `prepare` script in package.json).
+# To install manually: `bunx lefthook install`.
+#
+# The pre-commit secret scanner uses Gitleaks. Install once for full protection:
+#   macOS:  brew install gitleaks
+#   Linux:  https://github.com/gitleaks/gitleaks#installing
+# If gitleaks isn't on PATH the hook prints an install hint and skips. CI's
+# TruffleHog still scans every commit, so nothing slips through — but stopping
+# a leak at the keyboard is faster and cheaper than catching it after push.
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: gitleaks
+      run: |
+        if command -v gitleaks >/dev/null 2>&1; then
+          gitleaks protect --staged --redact --verbose --no-banner
+        else
+          echo "[lefthook] gitleaks not on PATH — install via 'brew install gitleaks' for local protection. CI's TruffleHog will still scan."
+        fi
+      fail_text: |
+        Secret detected in staged changes.
+        Remove it (or move to a vault / env var) before committing.
+        If this is a false positive, add a rule to .gitleaks.toml.
+
+    - name: biome
+      run: bunx biome check --no-errors-on-unmatched {staged_files}
+      glob: "*.{js,ts,json,jsonc}"
+
+commit-msg:
+  jobs:
+    - name: commitlint
+      # {1} is the path to .git/COMMIT_EDITMSG, passed by git.
+      run: bunx commitlint --edit {1}
