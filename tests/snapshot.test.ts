@@ -77,3 +77,52 @@ describe("snapshot / restore", () => {
 		expect(restored.stat("/tmp").isDirectory()).toBe(true);
 	});
 });
+
+describe("snapshot v2: binary content", () => {
+	test("non-UTF-8 bytes round-trip via base64 fallback", () => {
+		const fs = new VirtualFileSystem({ bare: true });
+		// 0xFF on its own is not valid UTF-8 → snapshot should pick base64.
+		const bytes = new Uint8Array([0x00, 0x01, 0xff, 0xfe, 0x80, 0x81]);
+		fs.writeFileBytes("/blob.bin", bytes);
+
+		const snap = snapshot(fs);
+		// Spot-check the stored encoding so a future regression that loses
+		// binary fidelity is caught early.
+		const blobNode = (snap.root as { children: Record<string, { encoding?: string }> }).children[
+			"blob.bin"
+		];
+		expect(blobNode?.encoding).toBe("base64");
+
+		const restored = restore(JSON.parse(JSON.stringify(snap)));
+		expect(Array.from(restored.readFileBytes("/blob.bin"))).toEqual(Array.from(bytes));
+	});
+
+	test("UTF-8 text picks the utf8 encoding (no base64 bloat)", () => {
+		const fs = new VirtualFileSystem({ bare: true, files: { "/a.txt": "héllo 世界" } });
+		const snap = snapshot(fs);
+		const node = (snap.root as { children: Record<string, { encoding?: string; content: string }> })
+			.children["a.txt"];
+		expect(node?.encoding).toBe("utf8");
+		expect(node?.content).toBe("héllo 世界");
+	});
+
+	test("legacy v1 snapshots (no encoding field) still load as UTF-8", () => {
+		const legacy = {
+			version: 1 as const,
+			createdAt: 0,
+			root: {
+				kind: "directory" as const,
+				children: {
+					"a.txt": {
+						kind: "file" as const,
+						content: "legacy content",
+						meta: { mode: 0o644, uid: 0, gid: 0, atime: 0, mtime: 0, ctime: 0, rev: 0 },
+					},
+				},
+				meta: { mode: 0o755, uid: 0, gid: 0, atime: 0, mtime: 0, ctime: 0, rev: 0 },
+			},
+		};
+		const restored = restore(legacy);
+		expect(restored.readFile("/a.txt")).toBe("legacy content");
+	});
+});
