@@ -1,0 +1,34 @@
+name: TruffleHog
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly deep scan over full history.
+    - cron: "23 6 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan git history for verified secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          # Full history so the scan can walk every commit, not just the tip.
+          fetch-depth: 0
+
+      - name: Run TruffleHog
+        uses: trufflesecurity/trufflehog@17456f8c7d042d8c82c9a8ca9e937231f9f42e26 # v3.95.2
+        with:
+          # `verified` = TruffleHog confirmed the secret is live by hitting the
+          # provider. `unknown` = matched a pattern but provider couldn't be
+          # reached to verify. We surface both; failing-to-verify is still signal.
+          extra_args: --results=verified,unknown

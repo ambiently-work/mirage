@@ -300,7 +300,11 @@ async function cloneRepo(
 	options: { ref?: string; depth?: number; submodules?: boolean },
 ): Promise<string> {
 	const tmp = await fs.promises.mkdtemp(nodePath.join(os.tmpdir(), "mirage-clone-"));
-	const args = ["clone"];
+	// `core.autocrlf=false`: keep file bytes exactly as committed. Windows git
+	// defaults to autocrlf=true and rewrites \n → \r\n on checkout, which would
+	// break the mirage's content-reproducibility contract across platforms.
+	const baseFlags = ["-c", "core.autocrlf=false"];
+	const args = [...baseFlags, "clone"];
 	const depth = options.depth;
 	if (depth !== undefined && depth !== Infinity && depth > 0) {
 		args.push("--depth", String(depth));
@@ -318,7 +322,7 @@ async function cloneRepo(
 			// `--branch` fails on commit SHAs; retry without it then check out.
 			await fs.promises.rm(tmp, { recursive: true, force: true });
 			const tmp2 = await fs.promises.mkdtemp(nodePath.join(os.tmpdir(), "mirage-clone-"));
-			const fallback = ["clone"];
+			const fallback = [...baseFlags, "clone"];
 			if (options.submodules) fallback.push("--recurse-submodules");
 			fallback.push(url, tmp2);
 			await runGit(process.cwd(), fallback);

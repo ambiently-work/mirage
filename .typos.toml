@@ -1,0 +1,4 @@
+# typos config — https://github.com/crate-ci/typos
+[default.extend-words]
+# "Excluder" = a function/predicate that excludes paths. Intentional.
+excluder = "excluder"

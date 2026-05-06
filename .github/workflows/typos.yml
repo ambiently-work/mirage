@@ -1,0 +1,25 @@
+name: typos
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  typos:
+    name: Spell-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Run typos
+        # Maintainer-published action; very low false-positive rate.
+        # Add overrides in .typos.toml if needed.
+        uses: crate-ci/typos@8bf453428eedb95b86dcc688df5c9f42f32c1d02 # v1.34.0

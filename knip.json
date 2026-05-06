@@ -1,0 +1,21 @@
+{
+	"$schema": "https://unpkg.com/knip@6/schema.json",
+	"project": ["src/**/*.ts", "tests/**/*.ts"],
+	"commitlint": {
+		"config": "commitlint.config.mjs"
+	},
+	"rules": {
+		"binaries": "error",
+		"dependencies": "error",
+		"devDependencies": "error",
+		"duplicates": "error",
+		"enumMembers": "error",
+		"exports": "error",
+		"files": "error",
+		"nsExports": "error",
+		"nsTypes": "error",
+		"types": "error",
+		"unlisted": "error",
+		"unresolved": "error"
+	}
+}
