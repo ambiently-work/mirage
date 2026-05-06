@@ -1,4 +1,5 @@
 import { globMatch } from "../glob.js";
+import { decodeUtf8, encodeUtf8 } from "../node.js";
 import type { IFileSystem, MirageStats } from "../types.js";
 
 /**
@@ -17,17 +18,18 @@ import type { IFileSystem, MirageStats } from "../types.js";
  *   shell.mount("/api", fs);
  */
 export class ObjectFileSystem implements IFileSystem {
-	private files: Map<string, { content: string; mtime: number }>;
+	private files: Map<string, { content: Uint8Array; mtime: number; rev: number }>;
 	private dirs: Set<string>;
 
-	constructor(files?: Record<string, string>) {
+	constructor(files?: Record<string, string | Uint8Array>) {
 		this.files = new Map();
 		this.dirs = new Set(["/"]);
 		if (files) {
 			const now = Date.now();
 			for (const [path, content] of Object.entries(files)) {
 				const normalized = path.startsWith("/") ? path : `/${path}`;
-				this.files.set(normalized, { content, mtime: now });
+				const bytes = typeof content === "string" ? encodeUtf8(content) : content;
+				this.files.set(normalized, { content: bytes, mtime: now, rev: 0 });
 				this.trackDirs(normalized);
 			}
 		}
@@ -53,7 +55,7 @@ export class ObjectFileSystem implements IFileSystem {
 		return this.dirs.has(normalized);
 	}
 
-	private makeStats(isFile: boolean, size: number, mtime: number): MirageStats {
+	private makeStats(isFile: boolean, size: number, mtime: number, rev = 0): MirageStats {
 		return {
 			size,
 			mode: isFile ? 0o644 : 0o755,
@@ -62,6 +64,7 @@ export class ObjectFileSystem implements IFileSystem {
 			atime: mtime,
 			mtime,
 			ctime: mtime,
+			rev,
 			isFile: () => isFile,
 			isDirectory: () => !isFile,
 			isSymlink: () => false,
@@ -69,6 +72,10 @@ export class ObjectFileSystem implements IFileSystem {
 	}
 
 	readFile(path: string): string {
+		return decodeUtf8(this.readFileBytes(path));
+	}
+
+	readFileBytes(path: string): Uint8Array {
 		const normalized = this.normalizePath(path);
 		const entry = this.files.get(normalized);
 		if (!entry) throw new Error(`ENOENT: no such file or directory: ${path}`);
@@ -97,7 +104,7 @@ export class ObjectFileSystem implements IFileSystem {
 		const normalized = this.normalizePath(path);
 		const entry = this.files.get(normalized);
 		if (entry) {
-			return this.makeStats(true, entry.content.length, entry.mtime);
+			return this.makeStats(true, entry.content.length, entry.mtime, entry.rev);
 		}
 		if (this.isDir(normalized)) {
 			return this.makeStats(false, 0, Date.now());
@@ -115,8 +122,17 @@ export class ObjectFileSystem implements IFileSystem {
 	}
 
 	writeFile(path: string, content: string): void {
+		this.writeFileBytes(path, encodeUtf8(content));
+	}
+
+	writeFileBytes(path: string, content: Uint8Array): void {
 		const normalized = this.normalizePath(path);
-		this.files.set(normalized, { content, mtime: Date.now() });
+		const prev = this.files.get(normalized);
+		this.files.set(normalized, {
+			content,
+			mtime: Date.now(),
+			rev: (prev?.rev ?? 0) + 1,
+		});
 		this.trackDirs(normalized);
 	}
 
@@ -124,10 +140,15 @@ export class ObjectFileSystem implements IFileSystem {
 		const normalized = this.normalizePath(path);
 		const existing = this.files.get(normalized);
 		if (existing) {
-			existing.content += content;
+			const tail = encodeUtf8(content);
+			const merged = new Uint8Array(existing.content.length + tail.length);
+			merged.set(existing.content, 0);
+			merged.set(tail, existing.content.length);
+			existing.content = merged;
 			existing.mtime = Date.now();
+			existing.rev += 1;
 		} else {
-			this.files.set(normalized, { content, mtime: Date.now() });
+			this.files.set(normalized, { content: encodeUtf8(content), mtime: Date.now(), rev: 1 });
 		}
 	}
 
@@ -158,13 +179,13 @@ export class ObjectFileSystem implements IFileSystem {
 	}
 
 	cp(src: string, dest: string): void {
-		const content = this.readFile(src);
-		this.writeFile(dest, content);
+		const content = this.readFileBytes(src);
+		this.writeFileBytes(dest, content);
 	}
 
 	mv(src: string, dest: string): void {
-		const content = this.readFile(src);
-		this.writeFile(dest, content);
+		const content = this.readFileBytes(src);
+		this.writeFileBytes(dest, content);
 		this.rm(src);
 	}
 
@@ -204,9 +225,18 @@ export class ObjectFileSystem implements IFileSystem {
 		return results.sort();
 	}
 
-	/** Get all files as a plain object */
+	/** Get all files as a plain object (file contents UTF-8 decoded). */
 	toObject(): Record<string, string> {
 		const result: Record<string, string> = {};
+		for (const [path, entry] of this.files) {
+			result[path] = decodeUtf8(entry.content);
+		}
+		return result;
+	}
+
+	/** Get all files as a Uint8Array map (lossless, binary-safe). */
+	toBytes(): Record<string, Uint8Array> {
+		const result: Record<string, Uint8Array> = {};
 		for (const [path, entry] of this.files) {
 			result[path] = entry.content;
 		}

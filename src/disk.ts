@@ -31,9 +31,9 @@ export interface LoadFromDiskOptions {
 	 */
 	followSymlinks?: boolean;
 	/**
-	 * Treat files larger than this many bytes as errors (rather than loading
-	 * potentially large binaries as UTF-8, which may corrupt them). Defaults
-	 * to 10 MiB. Set to `Infinity` to disable.
+	 * Treat files larger than this many bytes as errors. Loaded files are
+	 * stored byte-for-byte (not UTF-8 decoded), so this is purely a memory
+	 * guard. Defaults to 10 MiB. Set to `Infinity` to disable.
 	 */
 	maxFileBytes?: number;
 	/**
@@ -167,8 +167,8 @@ async function walkDir(
 						`Tighten the filter, raise maxFileBytes, or exclude binary assets.`,
 				);
 			}
-			const content = await fs.promises.readFile(absPath, "utf8");
-			mirage.writeFile(miragePath, content);
+			const content = await fs.promises.readFile(absPath);
+			mirage.writeFileBytes(miragePath, new Uint8Array(content));
 			try {
 				mirage.chmod(miragePath, stats.mode & 0o777);
 			} catch {
@@ -277,8 +277,8 @@ async function writeMirageDir(
 		}
 
 		if (stat.isFile()) {
-			const content = mirage.readFile(childMirage);
-			await fs.promises.writeFile(childAbs, content, "utf8");
+			const content = mirage.readFileBytes(childMirage);
+			await fs.promises.writeFile(childAbs, content);
 			try {
 				await fs.promises.chmod(childAbs, stat.mode & 0o777);
 			} catch {

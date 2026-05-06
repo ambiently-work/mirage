@@ -5,7 +5,7 @@ import * as os from "node:os";
 import * as nodePath from "node:path";
 import { pathToFileURL } from "node:url";
 import { VirtualFileSystem } from "../src/filesystem.js";
-import { loadFromGit, looksLikeGitUrl, readGitMetadata, saveAsGitRepo } from "../src/git.js";
+import { loadFromGit, looksLikeGitUrl, readGitMetadata, saveAsGitRepo } from "../src/git-cli.js";
 
 function makeTempDir(): string {
 	return fs.mkdtempSync(nodePath.join(os.tmpdir(), "mirage-git-"));

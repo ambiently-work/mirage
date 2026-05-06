@@ -36,6 +36,17 @@ export class LayeredFileSystem implements IFileSystem {
 		throw new Error(`ENOENT: no such file or directory: ${path}`);
 	}
 
+	readFileBytes(path: string): Uint8Array {
+		for (const layer of this.layers) {
+			try {
+				if (layer.exists(path)) {
+					return layer.readFileBytes(path);
+				}
+			} catch {}
+		}
+		throw new Error(`ENOENT: no such file or directory: ${path}`);
+	}
+
 	readDir(path: string): string[] {
 		const entries = new Set<string>();
 		for (const layer of this.layers) {
@@ -98,6 +109,10 @@ export class LayeredFileSystem implements IFileSystem {
 		this.writable.writeFile(path, content);
 	}
 
+	writeFileBytes(path: string, content: Uint8Array): void {
+		this.writable.writeFileBytes(path, content);
+	}
+
 	appendFile(path: string, content: string): void {
 		try {
 			const existing = this.readFile(path);
@@ -128,14 +143,14 @@ export class LayeredFileSystem implements IFileSystem {
 				this.cp(childSrc, childDest, options);
 			}
 		} else {
-			const content = this.readFile(src);
-			this.writable.writeFile(dest, content);
+			const content = this.readFileBytes(src);
+			this.writable.writeFileBytes(dest, content);
 		}
 	}
 
 	mv(src: string, dest: string): void {
-		const content = this.readFile(src);
-		this.writable.writeFile(dest, content);
+		const content = this.readFileBytes(src);
+		this.writable.writeFileBytes(dest, content);
 		try {
 			this.writable.rm(src);
 		} catch {

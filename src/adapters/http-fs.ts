@@ -1,3 +1,4 @@
+import { decodeUtf8, encodeUtf8 } from "../node.js";
 import type { IFileSystem, MirageStats } from "../types.js";
 
 /**
@@ -23,7 +24,7 @@ export class HttpFileSystem implements IFileSystem {
 	private headers: Record<string, string>;
 	private listEndpoint: string | null;
 	private cacheEnabled: boolean;
-	private fileCache = new Map<string, string>();
+	private fileCache = new Map<string, Uint8Array>();
 	private dirCache = new Map<string, string[]>();
 
 	constructor(baseUrl: string, options?: HttpFileSystemOptions) {
@@ -33,7 +34,7 @@ export class HttpFileSystem implements IFileSystem {
 		this.cacheEnabled = options?.cache ?? true;
 	}
 
-	private fetchSync(path: string): string {
+	private fetchSync(path: string): Uint8Array {
 		if (this.cacheEnabled) {
 			const cached = this.fileCache.get(path);
 			if (cached !== undefined) {
@@ -56,8 +57,8 @@ export class HttpFileSystem implements IFileSystem {
 		if (!res.ok) {
 			throw new Error(`ENOENT: HTTP ${res.status} for ${path}`);
 		}
-		const content = await res.text();
-		this.fileCache.set(path, content);
+		const buf = new Uint8Array(await res.arrayBuffer());
+		this.fileCache.set(path, buf);
 	}
 
 	async prefetchAll(paths: string[]): Promise<void> {
@@ -77,10 +78,10 @@ export class HttpFileSystem implements IFileSystem {
 	/**
 	 * Seed the cache directly (useful for testing or pre-populating).
 	 */
-	seed(files: Record<string, string>): void {
+	seed(files: Record<string, string | Uint8Array>): void {
 		for (const [path, content] of Object.entries(files)) {
 			const normalized = path.startsWith("/") ? path : `/${path}`;
-			this.fileCache.set(normalized, content);
+			this.fileCache.set(normalized, typeof content === "string" ? encodeUtf8(content) : content);
 		}
 	}
 
@@ -90,6 +91,10 @@ export class HttpFileSystem implements IFileSystem {
 	}
 
 	readFile(path: string): string {
+		return decodeUtf8(this.fetchSync(path));
+	}
+
+	readFileBytes(path: string): Uint8Array {
 		return this.fetchSync(path);
 	}
 
@@ -107,6 +112,7 @@ export class HttpFileSystem implements IFileSystem {
 			atime: Date.now(),
 			mtime: Date.now(),
 			ctime: Date.now(),
+			rev: 0,
 			isFile: () => true,
 			isDirectory: () => false,
 			isSymlink: () => false,
@@ -122,6 +128,10 @@ export class HttpFileSystem implements IFileSystem {
 	}
 
 	writeFile(): void {
+		throw new Error("EROFS: read-only HTTP filesystem");
+	}
+
+	writeFileBytes(): void {
 		throw new Error("EROFS: read-only HTTP filesystem");
 	}
 

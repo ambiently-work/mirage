@@ -27,7 +27,8 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./disk": "./src/disk.ts",
-		"./git": "./src/git.ts"
+		"./git": "./src/git/index.ts",
+		"./git-cli": "./src/git-cli.ts"
 	},
 	"publishConfig": {
 		"access": "public",
@@ -45,9 +46,14 @@
 				"default": "./dist/disk.js"
 			},
 			"./git": {
-				"types": "./dist/git.d.ts",
-				"import": "./dist/git.js",
-				"default": "./dist/git.js"
+				"types": "./dist/git/index.d.ts",
+				"import": "./dist/git/index.js",
+				"default": "./dist/git/index.js"
+			},
+			"./git-cli": {
+				"types": "./dist/git-cli.d.ts",
+				"import": "./dist/git-cli.js",
+				"default": "./dist/git-cli.js"
 			}
 		}
 	},
@@ -73,5 +79,9 @@
 		"knip": "^6.11.0",
 		"lefthook": "^2.1.6",
 		"typescript": "6.0.3"
+	},
+	"dependencies": {
+		"isomorphic-git": "^1.37.6",
+		"wasm-git": "^0.0.14"
 	}
 }
