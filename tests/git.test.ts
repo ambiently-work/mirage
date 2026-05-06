@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as nodePath from "node:path";
+import { pathToFileURL } from "node:url";
 import { VirtualFileSystem } from "../src/filesystem.js";
 import { loadFromGit, looksLikeGitUrl, readGitMetadata, saveAsGitRepo } from "../src/git.js";
 
@@ -139,7 +140,7 @@ describe("loadFromGit (clone)", () => {
 		const repo = makeRepo();
 		try {
 			const mirage = new VirtualFileSystem();
-			const meta = await loadFromGit(mirage, `file://${repo.dir}`, { depth: 1 });
+			const meta = await loadFromGit(mirage, pathToFileURL(repo.dir).href, { depth: 1 });
 			expect(mirage.readFile("/README.md")).toBe("# Hello\n");
 			expect(meta.cloned).toBe(true);
 			// Temp clone should be cleaned up by default
@@ -153,7 +154,7 @@ describe("loadFromGit (clone)", () => {
 		const repo = makeRepo();
 		try {
 			const mirage = new VirtualFileSystem();
-			const meta = await loadFromGit(mirage, `file://${repo.dir}`, {
+			const meta = await loadFromGit(mirage, pathToFileURL(repo.dir).href, {
 				depth: 1,
 				keepClone: true,
 			});
