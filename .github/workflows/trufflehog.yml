@@ -26,7 +26,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run TruffleHog
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@17456f8c7d042d8c82c9a8ca9e937231f9f42e26 # v3.95.2
         with:
           # `verified` = TruffleHog confirmed the secret is live by hitting the provider.
           # `unknown` = matched a pattern but provider couldn't be reached to verify.
