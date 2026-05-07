@@ -27,6 +27,7 @@
 
 import { decodeUtf8 } from "../node.js";
 import type { IFileSystem } from "../types.js";
+import { readBlobFromObjectStore } from "./objects.js";
 import type {
 	AddOptions,
 	BackendContext,
@@ -118,7 +119,7 @@ export class LibGit2Backend implements GitBackend {
 		await this.run(ctx, async (lg) => {
 			const args = ["add"];
 			if (opts.force) args.push("--force");
-			args.push("--", ...opts.filepaths);
+			args.push(...opts.filepaths);
 			expectExit(lg, args);
 		});
 	}
@@ -192,13 +193,10 @@ export class LibGit2Backend implements GitBackend {
 		});
 	}
 
-	async readBlob(ctx: BackendContext, oid: string, _filepath?: string): Promise<Uint8Array> {
-		return this.run(ctx, async (lg) => {
-			lg.callMain(["cat-file", "-p", oid]);
-			throw new Error(
-				"LibGit2Backend.readBlob: cat-file output capture not implemented; use IsoGitBackend",
-			);
-		});
+	async readBlob(ctx: BackendContext, oid: string, filepath?: string): Promise<Uint8Array> {
+		const gitFs = typeof ctx.gitdir === "string" ? ctx.fs : ctx.gitdir;
+		const gitdir = typeof ctx.gitdir === "string" ? ctx.gitdir : "/";
+		return readBlobFromObjectStore(gitFs, gitdir, oid, filepath);
 	}
 
 	async diff(_ctx: BackendContext): Promise<DiffEntry[]> {

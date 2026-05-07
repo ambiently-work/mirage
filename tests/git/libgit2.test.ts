@@ -59,6 +59,18 @@ describe("LibGit2Backend — write flow", () => {
 		const remotes = await git.listRemotes();
 		expect(remotes).toEqual([{ remote: "origin", url: "https://example.com/foo.git" }]);
 	});
+
+	test("readBlob round-trips arbitrary bytes from a commit", async () => {
+		const { git, fs } = newGit();
+		await git.init({ defaultBranch: "main" });
+		const bytes = new Uint8Array([0x00, 0x01, 0x02, 0xff, 0xfe, 0xfd]);
+		fs.writeFileBytes("/workspace/bin.dat", bytes);
+		await git.add("bin.dat");
+		const oid = await git.commit({ message: "binary" });
+
+		const blob = await git.readBlob(oid, "bin.dat");
+		expect(Array.from(blob)).toEqual(Array.from(bytes));
+	});
 });
 
 describe("LibGit2Backend — unsupported ops", () => {
