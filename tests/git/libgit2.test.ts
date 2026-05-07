@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { VirtualFileSystem } from "../../src/filesystem.js";
-import { LibGit2Backend, MirageGit } from "../../src/git/index.js";
+import { MirageGit } from "../../src/git/index.js";
+import { LibGit2Backend, parseRawDiffTreeOutput } from "../../src/git/libgit2-backend.js";
 
 function fresh(): VirtualFileSystem {
 	const fs = new VirtualFileSystem({ bare: true });
@@ -59,6 +60,18 @@ describe("LibGit2Backend — write flow", () => {
 		const remotes = await git.listRemotes();
 		expect(remotes).toEqual([{ remote: "origin", url: "https://example.com/foo.git" }]);
 	});
+
+	test("readBlob round-trips arbitrary bytes from a commit", async () => {
+		const { git, fs } = newGit();
+		await git.init({ defaultBranch: "main" });
+		const bytes = new Uint8Array([0x00, 0x01, 0x02, 0xff, 0xfe, 0xfd]);
+		fs.writeFileBytes("/workspace/bin.dat", bytes);
+		await git.add("bin.dat");
+		const oid = await git.commit({ message: "binary" });
+
+		const blob = await git.readBlob(oid, "bin.dat");
+		expect(Array.from(blob)).toEqual(Array.from(bytes));
+	});
 });
 
 describe("LibGit2Backend — unsupported ops", () => {
@@ -73,9 +86,67 @@ describe("LibGit2Backend — unsupported ops", () => {
 		await expect(git.push({ remote: "origin" })).rejects.toThrow(/IsoGitBackend/);
 	});
 
-	test("diff throws a descriptive error", async () => {
+	test("working-tree diff throws a descriptive error", async () => {
 		const { git } = newGit();
 		await git.init({ defaultBranch: "main" });
-		await expect(git.diff()).rejects.toThrow(/IsoGitBackend/);
+		await expect(git.diff()).rejects.toThrow(/tree-to-tree/);
+	});
+});
+
+describe("LibGit2Backend — diff", () => {
+	test("parses NUL-delimited diff-tree raw output", () => {
+		const before = "1111111111111111111111111111111111111111";
+		const after = "2222222222222222222222222222222222222222";
+		const added = "3333333333333333333333333333333333333333";
+		const removed = "4444444444444444444444444444444444444444";
+		const out = [
+			`:100644 100644 ${before} ${after} M`,
+			"changed λ file.txt",
+			`:000000 100644 0000000000000000000000000000000000000000 ${added} A`,
+			"added.txt",
+			`:100644 000000 ${removed} 0000000000000000000000000000000000000000 D`,
+			"removed.txt",
+			"",
+		].join("\0");
+
+		expect(parseRawDiffTreeOutput(out)).toEqual([
+			{ path: "changed λ file.txt", added: false, removed: false, aOid: before, bOid: after },
+			{ path: "added.txt", added: true, removed: false, aOid: null, bOid: added },
+			{ path: "removed.txt", added: false, removed: true, aOid: removed, bOid: null },
+		]);
+	});
+
+	test("parses newline-delimited diff-tree raw output", () => {
+		const before = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+		const after = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+		const out = `:100644 100644 ${before} ${after} M\tchanged.txt\n`;
+
+		expect(parseRawDiffTreeOutput(out)).toEqual([
+			{ path: "changed.txt", added: false, removed: false, aOid: before, bOid: after },
+		]);
+	});
+
+	test("diffs committed trees", async () => {
+		const { git, fs } = newGit();
+		await git.init({ defaultBranch: "main" });
+		fs.writeFile("/workspace/a.txt", "one");
+		fs.writeFile("/workspace/b.txt", "two");
+		await git.add(["a.txt", "b.txt"]);
+		const base = await git.commit({ message: "feat: base" });
+
+		fs.writeFile("/workspace/a.txt", "ONE");
+		fs.rm("/workspace/b.txt", { force: true });
+		fs.writeFile("/workspace/c.txt", "three");
+		await git.add(["a.txt", "b.txt", "c.txt"]);
+		const next = await git.commit({ message: "feat: update" });
+
+		const diff = await git.diff({ a: base, b: next });
+		const byPath = new Map(diff.map((d) => [d.path, d]));
+		expect(byPath.get("a.txt")).toMatchObject({ added: false, removed: false });
+		expect(byPath.get("a.txt")?.aOid).toMatch(/^[0-9a-f]{40}$/);
+		expect(byPath.get("a.txt")?.bOid).toMatch(/^[0-9a-f]{40}$/);
+		expect(byPath.get("b.txt")).toMatchObject({ added: false, removed: true, bOid: null });
+		expect(byPath.get("c.txt")).toMatchObject({ added: true, removed: false, aOid: null });
+		expect(diff.map((d) => d.path).sort()).toEqual(["a.txt", "b.txt", "c.txt"]);
 	});
 });
