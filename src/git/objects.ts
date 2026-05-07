@@ -8,7 +8,11 @@ interface GitObject {
 	body: Uint8Array;
 }
 
-async function readGitObject(fs: IFileSystem, gitdir: string, oid: string): Promise<GitObject> {
+export async function readGitObject(
+	fs: IFileSystem,
+	gitdir: string,
+	oid: string,
+): Promise<GitObject> {
 	const normalized = normalizeOid(oid);
 	const loosePath = joinPath(gitdir, `objects/${normalized.slice(0, 2)}/${normalized.slice(2)}`);
 	if (fs.exists(loosePath)) {
@@ -61,7 +65,7 @@ export function parseInflatedObject(
 	return { type: match[1] as GitObjectType, body };
 }
 
-function parseCommitTree(body: Uint8Array): string {
+export function parseCommitTree(body: Uint8Array): string {
 	const text = decodeUtf8(body);
 	const firstLine = text.split("\n", 1)[0];
 	const match = /^tree ([0-9a-f]{40})$/.exec(firstLine ?? "");
