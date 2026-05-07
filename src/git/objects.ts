@@ -1,18 +1,14 @@
 import { decodeUtf8 } from "../node.js";
 import type { IFileSystem } from "../types.js";
 
-export type GitObjectType = "blob" | "tree" | "commit" | "tag";
+type GitObjectType = "blob" | "tree" | "commit" | "tag";
 
-export interface GitObject {
+interface GitObject {
 	type: GitObjectType;
 	body: Uint8Array;
 }
 
-export async function readGitObject(
-	fs: IFileSystem,
-	gitdir: string,
-	oid: string,
-): Promise<GitObject> {
+async function readGitObject(fs: IFileSystem, gitdir: string, oid: string): Promise<GitObject> {
 	const normalized = normalizeOid(oid);
 	const loosePath = joinPath(gitdir, `objects/${normalized.slice(0, 2)}/${normalized.slice(2)}`);
 	if (fs.exists(loosePath)) {
@@ -65,7 +61,7 @@ export function parseInflatedObject(
 	return { type: match[1] as GitObjectType, body };
 }
 
-export function parseCommitTree(body: Uint8Array): string {
+function parseCommitTree(body: Uint8Array): string {
 	const text = decodeUtf8(body);
 	const firstLine = text.split("\n", 1)[0];
 	const match = /^tree ([0-9a-f]{40})$/.exec(firstLine ?? "");
