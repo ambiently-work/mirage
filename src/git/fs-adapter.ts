@@ -215,6 +215,7 @@ function ensureDirSync(fs: IFileSystem, path: string): void {
 function adaptStat(
 	s: {
 		size: number;
+		ino: number;
 		mode: number;
 		mtime: number;
 		ctime: number;
@@ -229,8 +230,9 @@ function adaptStat(
 ): FsStat {
 	const type: FsStat["type"] = s.isDirectory() ? "dir" : s.isSymlink() ? "symlink" : "file";
 	// Iso-git keys its workdir-vs-index stat cache by ino + mtime + size + mode.
-	// In-memory mirage has no real ino, so we synthesize one from
-	// `path-hash ^ rev` — and we ALSO offset mtime by `rev` whole seconds.
+	// Older or external adapters may report `ino = 0`, so we synthesize one
+	// from `path-hash ^ rev` for those. Native Mirage nodes expose stable
+	// inode identity, including shared identity for hardlinks.
 	//
 	// Two reasons for the dual encoding:
 	//   1. On Linux/macOS, iso-git uses `trustino = true` and the ino bump
@@ -240,7 +242,7 @@ function adaptStat(
 	//      ensures `mtimeSeconds` always differs across writes regardless of
 	//      sub-second wall-clock resolution.
 	const rev = s.rev | 0;
-	const ino = simpleHash(routedPath) ^ rev;
+	const ino = (s.ino || simpleHash(routedPath)) ^ rev;
 	const mtimeMs = s.mtime + rev * 1000;
 	return {
 		type,

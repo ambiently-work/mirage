@@ -2,6 +2,14 @@ import { globMatch } from "../glob.js";
 import { decodeUtf8, encodeUtf8 } from "../node.js";
 import type { IFileSystem, MirageStats } from "../types.js";
 
+interface ObjectFileEntry {
+	content: Uint8Array;
+	ino: number;
+	mtime: number;
+	rev: number;
+	nlink: number;
+}
+
 /**
  * A simple flat filesystem backed by a plain object/Map.
  * Useful for quickly creating filesystems from data structures,
@@ -18,8 +26,9 @@ import type { IFileSystem, MirageStats } from "../types.js";
  *   shell.mount("/api", fs);
  */
 export class ObjectFileSystem implements IFileSystem {
-	private files: Map<string, { content: Uint8Array; mtime: number; rev: number }>;
+	private files: Map<string, ObjectFileEntry>;
 	private dirs: Set<string>;
+	private nextInode = 1;
 
 	constructor(files?: Record<string, string | Uint8Array>) {
 		this.files = new Map();
@@ -29,7 +38,13 @@ export class ObjectFileSystem implements IFileSystem {
 			for (const [path, content] of Object.entries(files)) {
 				const normalized = path.startsWith("/") ? path : `/${path}`;
 				const bytes = typeof content === "string" ? encodeUtf8(content) : content;
-				this.files.set(normalized, { content: bytes, mtime: now, rev: 0 });
+				this.files.set(normalized, {
+					content: bytes,
+					ino: this.nextInode++,
+					mtime: now,
+					rev: 0,
+					nlink: 1,
+				});
 				this.trackDirs(normalized);
 			}
 		}
@@ -55,9 +70,17 @@ export class ObjectFileSystem implements IFileSystem {
 		return this.dirs.has(normalized);
 	}
 
-	private makeStats(isFile: boolean, size: number, mtime: number, rev = 0): MirageStats {
+	private makeStats(
+		isFile: boolean,
+		size: number,
+		mtime: number,
+		rev = 0,
+		ino = 0,
+		nlink = 1,
+	): MirageStats {
 		return {
 			size,
+			ino,
 			mode: isFile ? 0o644 : 0o755,
 			uid: 0,
 			gid: 0,
@@ -65,6 +88,8 @@ export class ObjectFileSystem implements IFileSystem {
 			mtime,
 			ctime: mtime,
 			rev,
+			nlink,
+			nlinks: nlink,
 			isFile: () => isFile,
 			isDirectory: () => !isFile,
 			isSymlink: () => false,
@@ -104,7 +129,14 @@ export class ObjectFileSystem implements IFileSystem {
 		const normalized = this.normalizePath(path);
 		const entry = this.files.get(normalized);
 		if (entry) {
-			return this.makeStats(true, entry.content.length, entry.mtime, entry.rev);
+			return this.makeStats(
+				true,
+				entry.content.length,
+				entry.mtime,
+				entry.rev,
+				entry.ino,
+				entry.nlink,
+			);
 		}
 		if (this.isDir(normalized)) {
 			return this.makeStats(false, 0, Date.now());
@@ -128,11 +160,19 @@ export class ObjectFileSystem implements IFileSystem {
 	writeFileBytes(path: string, content: Uint8Array): void {
 		const normalized = this.normalizePath(path);
 		const prev = this.files.get(normalized);
-		this.files.set(normalized, {
-			content,
-			mtime: Date.now(),
-			rev: (prev?.rev ?? 0) + 1,
-		});
+		if (prev) {
+			prev.content = content;
+			prev.mtime = Date.now();
+			prev.rev += 1;
+		} else {
+			this.files.set(normalized, {
+				content,
+				ino: this.nextInode++,
+				mtime: Date.now(),
+				rev: 1,
+				nlink: 1,
+			});
+		}
 		this.trackDirs(normalized);
 	}
 
@@ -148,7 +188,13 @@ export class ObjectFileSystem implements IFileSystem {
 			existing.mtime = Date.now();
 			existing.rev += 1;
 		} else {
-			this.files.set(normalized, { content: encodeUtf8(content), mtime: Date.now(), rev: 1 });
+			this.files.set(normalized, {
+				content: encodeUtf8(content),
+				ino: this.nextInode++,
+				mtime: Date.now(),
+				rev: 1,
+				nlink: 1,
+			});
 		}
 	}
 
@@ -160,7 +206,10 @@ export class ObjectFileSystem implements IFileSystem {
 
 	rm(path: string, options?: { recursive?: boolean; force?: boolean }): void {
 		const normalized = this.normalizePath(path);
-		if (this.files.has(normalized)) {
+		const entry = this.files.get(normalized);
+		if (entry) {
+			entry.nlink = Math.max(entry.nlink - 1, 0);
+			entry.mtime = Date.now();
 			this.files.delete(normalized);
 			return;
 		}
@@ -168,6 +217,8 @@ export class ObjectFileSystem implements IFileSystem {
 			const prefix = `${normalized}/`;
 			for (const key of [...this.files.keys()]) {
 				if (key.startsWith(prefix)) {
+					const entry = this.files.get(key);
+					if (entry) entry.nlink = Math.max(entry.nlink - 1, 0);
 					this.files.delete(key);
 				}
 			}
@@ -184,9 +235,29 @@ export class ObjectFileSystem implements IFileSystem {
 	}
 
 	mv(src: string, dest: string): void {
-		const content = this.readFileBytes(src);
-		this.writeFileBytes(dest, content);
-		this.rm(src);
+		const normalizedSrc = this.normalizePath(src);
+		const normalizedDest = this.normalizePath(dest);
+		const entry = this.files.get(normalizedSrc);
+		if (!entry) throw new Error(`ENOENT: no such file or directory: ${src}`);
+		const previousDest = this.files.get(normalizedDest);
+		if (previousDest) previousDest.nlink = Math.max(previousDest.nlink - 1, 0);
+		this.files.set(normalizedDest, entry);
+		this.files.delete(normalizedSrc);
+		this.trackDirs(normalizedDest);
+	}
+
+	link(src: string, dest: string): void {
+		const normalizedSrc = this.normalizePath(src);
+		const normalizedDest = this.normalizePath(dest);
+		const entry = this.files.get(normalizedSrc);
+		if (!entry) throw new Error(`ENOENT: no such file or directory: ${src}`);
+		if (this.files.has(normalizedDest) || this.isDir(normalizedDest)) {
+			throw new Error(`EEXIST: file already exists: ${dest}`);
+		}
+		entry.nlink += 1;
+		entry.mtime = Date.now();
+		this.files.set(normalizedDest, entry);
+		this.trackDirs(normalizedDest);
 	}
 
 	chmod(): void {
