@@ -1,4 +1,4 @@
-import type { IFileSystem, MirageStats } from "../types.js";
+import type { IFileSystem, MirageMount, MirageStats } from "../types.js";
 
 /**
  * Union/overlay filesystem. Reads cascade through layers (first match wins).
@@ -204,5 +204,9 @@ export class LayeredFileSystem implements IFileSystem {
 			} catch {}
 		}
 		return [...results].sort();
+	}
+
+	listMounts(): MirageMount[] {
+		return this.layers.flatMap((layer) => layer.listMounts());
 	}
 }

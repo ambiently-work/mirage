@@ -296,6 +296,10 @@ export class ObjectFileSystem implements IFileSystem {
 		return results.sort();
 	}
 
+	listMounts(): [] {
+		return [];
+	}
+
 	/** Get all files as a plain object (file contents UTF-8 decoded). */
 	toObject(): Record<string, string> {
 		const result: Record<string, string> = {};

@@ -185,4 +185,8 @@ export class HttpFileSystem implements IFileSystem {
 	glob(_pattern: string): string[] {
 		return [...this.fileCache.keys()].sort();
 	}
+
+	listMounts(): [] {
+		return [];
+	}
 }

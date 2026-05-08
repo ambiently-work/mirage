@@ -1,4 +1,4 @@
-import type { IFileSystem, MirageStats } from "../types.js";
+import type { IFileSystem, MirageMount, MirageStats } from "../types.js";
 
 /**
  * Wraps any IFileSystem and makes it read-only.
@@ -41,6 +41,10 @@ export class ReadOnlyFileSystem implements IFileSystem {
 
 	glob(pattern: string, options?: { cwd?: string }): string[] {
 		return this.inner.glob(pattern, options);
+	}
+
+	listMounts(): MirageMount[] {
+		return this.inner.listMounts();
 	}
 
 	writeFile(): void {

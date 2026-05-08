@@ -2,7 +2,7 @@ import { globMatch } from "./glob.js";
 import type { MirageNode, NodeMeta } from "./node.js";
 import { createDirectory, createFile, createSymlink, decodeUtf8, encodeUtf8 } from "./node.js";
 import { basename, dirname, isAbsolute, join, normalize, resolve, split } from "./path.js";
-import type { IFileSystem, MirageStats } from "./types.js";
+import type { IFileSystem, MirageMount, MirageMountOptions, MirageStats } from "./types.js";
 
 const MAX_SYMLINK_HOPS = 40;
 
@@ -76,6 +76,7 @@ export class VirtualFileSystem implements IFileSystem {
 	private _uid: number;
 	private _gid: number;
 	private mounts = new Map<string, IFileSystem>();
+	private mountMetadata = new Map<string, Omit<MirageMount, "path">>();
 
 	constructor(options?: VirtualFileSystemOptions) {
 		this.root = createDirectory(0o755);
@@ -662,18 +663,33 @@ export class VirtualFileSystem implements IFileSystem {
 		}
 	}
 
-	mount(mountPoint: string, fs: IFileSystem): void {
+	mount(mountPoint: string, fs: IFileSystem, metadata?: MirageMountOptions): void {
 		const normalized = normalize(mountPoint);
 		this.mounts.set(normalized, fs);
+		this.mountMetadata.set(normalized, {
+			kind: metadata?.kind ?? fs.constructor.name,
+			...(metadata?.source === undefined ? {} : { source: metadata.source }),
+			...(metadata?.options === undefined ? {} : { options: { ...metadata.options } }),
+		});
 		this.mkdirRecursive(normalized);
 	}
 
 	unmount(mountPoint: string): void {
-		this.mounts.delete(normalize(mountPoint));
+		const normalized = normalize(mountPoint);
+		this.mounts.delete(normalized);
+		this.mountMetadata.delete(normalized);
 	}
 
-	listMounts(): Map<string, IFileSystem> {
-		return new Map(this.mounts);
+	listMounts(): MirageMount[] {
+		return [...this.mounts.keys()].sort().map((path) => {
+			const metadata = this.mountMetadata.get(path) ?? { kind: "unknown" };
+			return {
+				path,
+				kind: metadata.kind,
+				...(metadata.source === undefined ? {} : { source: metadata.source }),
+				...(metadata.options === undefined ? {} : { options: { ...metadata.options } }),
+			};
+		});
 	}
 
 	/**
