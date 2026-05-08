@@ -1,6 +1,6 @@
 import { globMatch } from "../glob.js";
 import { basename, extname, isAbsolute, join, normalize } from "../path.js";
-import type { IFileSystem, MirageStats } from "../types.js";
+import type { IFileSystem, MirageMount, MirageStats } from "../types.js";
 
 export type HookOperation = "write" | "append" | "copy";
 
@@ -171,6 +171,10 @@ export class HookedFileSystem implements IFileSystem {
 
 	glob(pattern: string, options?: { cwd?: string }): string[] {
 		return this.inner.glob(pattern, options);
+	}
+
+	listMounts(): MirageMount[] {
+		return this.inner.listMounts();
 	}
 
 	private runHooks(content: string | Uint8Array, context: FileHookContext): string | Uint8Array {
