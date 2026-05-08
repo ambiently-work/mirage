@@ -123,12 +123,13 @@ function normalizeTreeish(obj: GitObject, oid: string): string {
 }
 
 async function inflateZlib(bytes: Uint8Array): Promise<Uint8Array> {
-	if (typeof DecompressionStream !== "function") {
-		throw new Error("DecompressionStream is unavailable; cannot inflate loose git objects");
+	if (typeof DecompressionStream === "function") {
+		const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"));
+		const inflated = await new Response(stream).arrayBuffer();
+		return new Uint8Array(inflated);
 	}
-	const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"));
-	const inflated = await new Response(stream).arrayBuffer();
-	return new Uint8Array(inflated);
+	const { inflateSync } = await import("node:zlib");
+	return inflateSync(bytes);
 }
 
 function normalizeOid(oid: string): string {
