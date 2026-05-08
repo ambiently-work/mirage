@@ -1,5 +1,14 @@
 // Core types
 
+export {
+	type FileHook,
+	type FileHookContext,
+	type FileHookResult,
+	HookedFileSystem,
+	type HookedFileSystemOptions,
+	type HookOperation,
+	type HookRule,
+} from "./adapters/hooked.js";
 // Adapters
 export { HttpFileSystem, type HttpFileSystemOptions } from "./adapters/http-fs.js";
 export { LayeredFileSystem } from "./adapters/layered.js";
@@ -45,5 +54,5 @@ export {
 	type SnapshotNode,
 	snapshot,
 } from "./snapshot.js";
-export type { IFileSystem, MirageStats } from "./types.js";
+export type { IFileSystem, MirageMount, MirageMountOptions, MirageStats } from "./types.js";
 export type { WasmGlobModule } from "./wasm.js";

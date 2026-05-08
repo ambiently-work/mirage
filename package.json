@@ -44,6 +44,11 @@
 			"types": "./dist/git-cli.d.ts",
 			"import": "./dist/git-cli.js",
 			"default": "./dist/git-cli.js"
+		},
+		"./hooks": {
+			"types": "./dist/adapters/hooked.d.ts",
+			"import": "./dist/adapters/hooked.js",
+			"default": "./dist/adapters/hooked.js"
 		}
 	},
 	"publishConfig": {

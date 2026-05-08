@@ -133,6 +133,49 @@ describe("VirtualFileSystem: glob", () => {
 	});
 });
 
+describe("VirtualFileSystem: mounts", () => {
+	test("lists mount metadata through the public API", () => {
+		const fs = new VirtualFileSystem({ bare: true });
+		const mounted = new VirtualFileSystem({ bare: true });
+
+		fs.mount("/work", mounted, {
+			kind: "tmpfs",
+			source: "none",
+			options: { readonly: false },
+		});
+
+		expect(fs.listMounts()).toEqual([
+			{
+				path: "/work",
+				kind: "tmpfs",
+				source: "none",
+				options: { readonly: false },
+			},
+		]);
+	});
+
+	test("listMounts returns cloned option objects sorted by path", () => {
+		const fs = new VirtualFileSystem({ bare: true });
+		fs.mount("/z", new VirtualFileSystem({ bare: true }), { kind: "zfs", options: { label: "z" } });
+		fs.mount("/a", new VirtualFileSystem({ bare: true }), { kind: "afs", options: { label: "a" } });
+
+		const mounts = fs.listMounts();
+		expect(mounts.map((mount) => mount.path)).toEqual(["/a", "/z"]);
+		if (mounts[0]?.options) {
+			mounts[0].options.label = "changed";
+		}
+
+		expect(fs.listMounts()[0]?.options).toEqual({ label: "a" });
+	});
+
+	test("unmount removes metadata", () => {
+		const fs = new VirtualFileSystem({ bare: true });
+		fs.mount("/work", new VirtualFileSystem({ bare: true }), { kind: "tmpfs" });
+		fs.unmount("/work");
+		expect(fs.listMounts()).toEqual([]);
+	});
+});
+
 describe("VirtualFileSystem: snapshot (legacy flat)", () => {
 	test("returns file contents", () => {
 		const fs = new VirtualFileSystem({ bare: true, files: { "/a.txt": "x", "/b/c.txt": "y" } });
