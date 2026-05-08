@@ -22,40 +22,32 @@
 		"browser"
 	],
 	"type": "module",
-	"main": "./src/index.ts",
-	"types": "./src/index.ts",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
 	"exports": {
-		".": "./src/index.ts",
-		"./disk": "./src/disk.ts",
-		"./git": "./src/git/index.ts",
-		"./git-cli": "./src/git-cli.ts"
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./disk": {
+			"types": "./dist/disk.d.ts",
+			"import": "./dist/disk.js",
+			"default": "./dist/disk.js"
+		},
+		"./git": {
+			"types": "./dist/git/index.d.ts",
+			"import": "./dist/git/index.js",
+			"default": "./dist/git/index.js"
+		},
+		"./git-cli": {
+			"types": "./dist/git-cli.d.ts",
+			"import": "./dist/git-cli.js",
+			"default": "./dist/git-cli.js"
+		}
 	},
 	"publishConfig": {
-		"access": "public",
-		"main": "./dist/index.js",
-		"types": "./dist/index.d.ts",
-		"exports": {
-			".": {
-				"types": "./dist/index.d.ts",
-				"import": "./dist/index.js",
-				"default": "./dist/index.js"
-			},
-			"./disk": {
-				"types": "./dist/disk.d.ts",
-				"import": "./dist/disk.js",
-				"default": "./dist/disk.js"
-			},
-			"./git": {
-				"types": "./dist/git/index.d.ts",
-				"import": "./dist/git/index.js",
-				"default": "./dist/git/index.js"
-			},
-			"./git-cli": {
-				"types": "./dist/git-cli.d.ts",
-				"import": "./dist/git-cli.js",
-				"default": "./dist/git-cli.js"
-			}
-		}
+		"access": "public"
 	},
 	"files": [
 		"dist"
