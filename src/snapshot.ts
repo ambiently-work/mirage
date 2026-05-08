@@ -92,6 +92,9 @@ function nodeToSnapshot(node: MirageNode): SnapshotNode {
 	if (node.kind === "symlink") {
 		return { kind: "symlink", target: node.target, meta: { ...node.meta } };
 	}
+	if (node.kind === "special") {
+		throw new Error("ENOTSUP: special files cannot be serialized in snapshots");
+	}
 	const children: Record<string, SnapshotNode> = {};
 	for (const [name, child] of node.children) {
 		children[name] = nodeToSnapshot(child);
