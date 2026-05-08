@@ -25,6 +25,11 @@ describe("ObjectFileSystem", () => {
 		const fs = new ObjectFileSystem();
 		expect(() => fs.symlink("/a", "/b")).toThrow(/ENOSYS/);
 	});
+
+	test("reports no mounts", () => {
+		const fs = new ObjectFileSystem();
+		expect(fs.listMounts()).toEqual([]);
+	});
 });
 
 describe("ReadOnlyFileSystem", () => {
@@ -35,6 +40,13 @@ describe("ReadOnlyFileSystem", () => {
 		expect(() => ro.writeFile("/a.txt", "y")).toThrow(/EROFS/);
 		expect(() => ro.mkdir("/d")).toThrow(/EROFS/);
 		expect(() => ro.rm("/a.txt")).toThrow(/EROFS/);
+	});
+
+	test("delegates mount listing", () => {
+		const inner = new VirtualFileSystem({ bare: true });
+		inner.mount("/mnt", new ObjectFileSystem(), { kind: "object", source: "memory" });
+		const ro = new ReadOnlyFileSystem(inner);
+		expect(ro.listMounts()).toEqual([{ path: "/mnt", kind: "object", source: "memory" }]);
 	});
 });
 
@@ -61,6 +73,20 @@ describe("LayeredFileSystem", () => {
 		const fs = new LayeredFileSystem(overlay, base);
 		expect(fs.readDir("/pkg")).toEqual(["a.ts", "b.ts"]);
 	});
+
+	test("combines mount listings from layers", () => {
+		const base = new VirtualFileSystem({ bare: true });
+		const overlay = new VirtualFileSystem({ bare: true });
+		base.mount("/base", new ObjectFileSystem(), { kind: "object" });
+		overlay.mount("/overlay", new ObjectFileSystem(), { kind: "object" });
+
+		const fs = new LayeredFileSystem(overlay, base);
+
+		expect(fs.listMounts()).toEqual([
+			{ path: "/overlay", kind: "object" },
+			{ path: "/base", kind: "object" },
+		]);
+	});
 });
 
 describe("HttpFileSystem", () => {
@@ -78,5 +104,10 @@ describe("HttpFileSystem", () => {
 	test("writes throw EROFS", () => {
 		const fs = new HttpFileSystem("https://example.com");
 		expect(() => fs.writeFile()).toThrow(/EROFS/);
+	});
+
+	test("reports no mounts", () => {
+		const fs = new HttpFileSystem("https://example.com");
+		expect(fs.listMounts()).toEqual([]);
 	});
 });

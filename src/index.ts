@@ -39,5 +39,5 @@ export {
 	type SnapshotNode,
 	snapshot,
 } from "./snapshot.js";
-export type { IFileSystem, MirageStats } from "./types.js";
+export type { IFileSystem, MirageMount, MirageMountOptions, MirageStats } from "./types.js";
 export type { WasmGlobModule } from "./wasm.js";
