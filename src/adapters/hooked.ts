@@ -149,6 +149,10 @@ export class HookedFileSystem implements IFileSystem {
 		this.inner.mv(src, dest);
 	}
 
+	link(src: string, dest: string): void {
+		this.inner.link(src, dest);
+	}
+
 	chmod(path: string, mode: number): void {
 		this.inner.chmod(path, mode);
 	}

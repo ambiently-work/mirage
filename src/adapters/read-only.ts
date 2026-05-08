@@ -75,6 +75,10 @@ export class ReadOnlyFileSystem implements IFileSystem {
 		throw new Error("EROFS: read-only file system");
 	}
 
+	link(): void {
+		throw new Error("EROFS: read-only file system");
+	}
+
 	chmod(): void {
 		throw new Error("EROFS: read-only file system");
 	}

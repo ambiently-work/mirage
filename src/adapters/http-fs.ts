@@ -106,6 +106,7 @@ export class HttpFileSystem implements IFileSystem {
 		const content = this.fetchSync(path);
 		return {
 			size: content.length,
+			ino: 0,
 			mode: 0o444,
 			uid: 0,
 			gid: 0,
@@ -113,6 +114,8 @@ export class HttpFileSystem implements IFileSystem {
 			mtime: Date.now(),
 			ctime: Date.now(),
 			rev: 0,
+			nlink: 1,
+			nlinks: 1,
 			isFile: () => true,
 			isDirectory: () => false,
 			isSymlink: () => false,
@@ -152,6 +155,10 @@ export class HttpFileSystem implements IFileSystem {
 	}
 
 	mv(): void {
+		throw new Error("EROFS: read-only HTTP filesystem");
+	}
+
+	link(): void {
 		throw new Error("EROFS: read-only HTTP filesystem");
 	}
 

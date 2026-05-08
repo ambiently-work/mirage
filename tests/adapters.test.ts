@@ -27,6 +27,16 @@ describe("ObjectFileSystem", () => {
 		expect(() => fs.symlink("/a", "/b")).toThrow(/ENOSYS/);
 	});
 
+	test("hardlinks share file identity", () => {
+		const fs = new ObjectFileSystem({ "/a.txt": "hi" });
+		fs.link("/a.txt", "/b.txt");
+		fs.writeFile("/b.txt", "bye");
+
+		expect(fs.readFile("/a.txt")).toBe("bye");
+		expect(fs.stat("/a.txt").ino).toBe(fs.stat("/b.txt").ino);
+		expect(fs.stat("/a.txt").nlink).toBe(2);
+	});
+
 	test("reports no mounts", () => {
 		const fs = new ObjectFileSystem();
 		expect(fs.listMounts()).toEqual([]);

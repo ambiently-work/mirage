@@ -1,5 +1,6 @@
 export interface MirageStats {
 	size: number;
+	ino: number;
 	mode: number;
 	uid: number;
 	gid: number;
@@ -13,6 +14,8 @@ export interface MirageStats {
 	 * within the same wall-clock second (where `mtime` would collide).
 	 */
 	rev: number;
+	nlink: number;
+	nlinks: number;
 	isFile(): boolean;
 	isDirectory(): boolean;
 	isSymlink(): boolean;
@@ -51,6 +54,7 @@ export interface IFileSystem {
 	rm(path: string, options?: { recursive?: boolean; force?: boolean }): void;
 	cp(src: string, dest: string, options?: { recursive?: boolean }): void;
 	mv(src: string, dest: string): void;
+	link(src: string, dest: string): void;
 	chmod(path: string, mode: number): void;
 	chown(path: string, uid: number, gid: number): void;
 	symlink(target: string, path: string): void;

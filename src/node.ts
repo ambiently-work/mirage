@@ -1,4 +1,5 @@
 export interface NodeMeta {
+	ino?: number;
 	mode: number;
 	uid: number;
 	gid: number;
@@ -12,6 +13,7 @@ export interface NodeMeta {
 	 * defeats stat caches across sub-second-resolution mtime collisions.
 	 */
 	rev: number;
+	nlink?: number;
 }
 
 export interface SpecialFileHandlers {
@@ -20,6 +22,8 @@ export interface SpecialFileHandlers {
 	append?: (path: string, content: Uint8Array) => void;
 	size?: number | (() => number);
 }
+
+let nextInode = 1;
 
 export type MirageNode =
 	| { kind: "file"; content: Uint8Array; meta: NodeMeta }
@@ -30,6 +34,7 @@ export type MirageNode =
 export function defaultMeta(mode: number): NodeMeta {
 	const now = Date.now();
 	return {
+		ino: nextInode++,
 		mode,
 		uid: 0,
 		gid: 0,
@@ -37,6 +42,7 @@ export function defaultMeta(mode: number): NodeMeta {
 		mtime: now,
 		ctime: now,
 		rev: 0,
+		nlink: 1,
 	};
 }
 
