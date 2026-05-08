@@ -28,7 +28,8 @@
 		".": "./src/index.ts",
 		"./disk": "./src/disk.ts",
 		"./git": "./src/git/index.ts",
-		"./git-cli": "./src/git-cli.ts"
+		"./git-cli": "./src/git-cli.ts",
+		"./hooks": "./src/adapters/hooked.ts"
 	},
 	"publishConfig": {
 		"access": "public",
@@ -54,6 +55,11 @@
 				"types": "./dist/git-cli.d.ts",
 				"import": "./dist/git-cli.js",
 				"default": "./dist/git-cli.js"
+			},
+			"./hooks": {
+				"types": "./dist/adapters/hooked.d.ts",
+				"import": "./dist/adapters/hooked.js",
+				"default": "./dist/adapters/hooked.js"
 			}
 		}
 	},
