@@ -67,7 +67,7 @@ export function restore(
 		throw new Error("snapshot root must be a directory");
 	}
 	const fs = new VirtualFileSystem({ ...options, bare: true });
-	fs.setRoot(snapshotToNode(snap.root));
+	fs.setRoot(snapshotToNode(snap.root, new Map()));
 	return fs;
 }
 
@@ -99,18 +99,26 @@ function nodeToSnapshot(node: MirageNode): SnapshotNode {
 	return { kind: "directory", children, meta: { ...node.meta } };
 }
 
-function snapshotToNode(snap: SnapshotNode): MirageNode {
+function snapshotToNode(snap: SnapshotNode, hardlinks: Map<number, MirageNode>): MirageNode {
 	if (snap.kind === "file") {
+		if (snap.meta.nlink && snap.meta.nlink > 1 && snap.meta.ino) {
+			const existing = hardlinks.get(snap.meta.ino);
+			if (existing) return existing;
+		}
 		const encoding = snap.encoding ?? "utf8";
 		const bytes = encoding === "base64" ? base64ToBytes(snap.content) : encodeUtf8(snap.content);
-		return { kind: "file", content: bytes, meta: { ...snap.meta } };
+		const node: MirageNode = { kind: "file", content: bytes, meta: { ...snap.meta } };
+		if (snap.meta.nlink && snap.meta.nlink > 1 && snap.meta.ino) {
+			hardlinks.set(snap.meta.ino, node);
+		}
+		return node;
 	}
 	if (snap.kind === "symlink") {
 		return { kind: "symlink", target: snap.target, meta: { ...snap.meta } };
 	}
 	const children = new Map<string, MirageNode>();
 	for (const [name, child] of Object.entries(snap.children)) {
-		children.set(name, snapshotToNode(child));
+		children.set(name, snapshotToNode(child, hardlinks));
 	}
 	return { kind: "directory", children, meta: { ...snap.meta } };
 }

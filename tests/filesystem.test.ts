@@ -104,6 +104,38 @@ describe("VirtualFileSystem: symlinks", () => {
 	});
 });
 
+describe("VirtualFileSystem: hardlinks", () => {
+	test("shares file identity and content across hardlinks", () => {
+		const fs = new VirtualFileSystem({ bare: true, files: { "/a.txt": "hi" } });
+
+		fs.link("/a.txt", "/b.txt");
+		fs.writeFile("/a.txt", "bye");
+
+		expect(fs.readFile("/b.txt")).toBe("bye");
+		expect(fs.stat("/a.txt").ino).toBe(fs.stat("/b.txt").ino);
+		expect(fs.stat("/a.txt").nlink).toBe(2);
+		expect(fs.stat("/b.txt").nlinks).toBe(2);
+	});
+
+	test("removing one hardlink leaves the other path valid", () => {
+		const fs = new VirtualFileSystem({ bare: true, files: { "/a.txt": "hi" } });
+		fs.link("/a.txt", "/b.txt");
+
+		fs.rm("/a.txt");
+
+		expect(fs.exists("/a.txt")).toBe(false);
+		expect(fs.readFile("/b.txt")).toBe("hi");
+		expect(fs.stat("/b.txt").nlink).toBe(1);
+	});
+
+	test("hardlinking directories fails", () => {
+		const fs = new VirtualFileSystem({ bare: true });
+		fs.mkdir("/dir");
+
+		expect(() => fs.link("/dir", "/dir-link")).toThrow(/EPERM/);
+	});
+});
+
 describe("VirtualFileSystem: cwd", () => {
 	test("cwd affects relative paths", () => {
 		const fs = new VirtualFileSystem({ files: { "/sub/a.txt": "hi" } });

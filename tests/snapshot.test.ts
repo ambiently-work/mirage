@@ -44,6 +44,19 @@ describe("snapshot / restore", () => {
 		expect(restored.stat("/script.sh").mode).toBe(0o755);
 	});
 
+	test("round-trips hardlink identity", () => {
+		const fs = new VirtualFileSystem({ bare: true, files: { "/a.txt": "hi" } });
+		fs.link("/a.txt", "/b.txt");
+		const snap = snapshot(fs);
+
+		const restored = restore(snap);
+		restored.writeFile("/a.txt", "bye");
+
+		expect(restored.readFile("/b.txt")).toBe("bye");
+		expect(restored.stat("/a.txt").ino).toBe(restored.stat("/b.txt").ino);
+		expect(restored.stat("/a.txt").nlink).toBe(2);
+	});
+
 	test("is JSON-serializable", () => {
 		const fs = new VirtualFileSystem({ bare: true, files: { "/a.txt": "x" } });
 		const snap = snapshot(fs);

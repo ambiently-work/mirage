@@ -9,8 +9,10 @@ const MAX_SYMLINK_HOPS = 40;
 function makeStats(node: MirageNode): MirageStats {
 	const meta = node.meta;
 	const size = node.kind === "file" ? node.content.length : 0;
+	const nlink = meta.nlink ?? 1;
 	return {
 		size,
+		ino: meta.ino ?? 0,
 		mode: meta.mode,
 		uid: meta.uid,
 		gid: meta.gid,
@@ -18,6 +20,8 @@ function makeStats(node: MirageNode): MirageStats {
 		mtime: meta.mtime,
 		ctime: meta.ctime,
 		rev: meta.rev,
+		nlink,
+		nlinks: nlink,
 		isFile: () => node.kind === "file",
 		isDirectory: () => node.kind === "directory",
 		isSymlink: () => node.kind === "symlink",
@@ -416,8 +420,17 @@ export class VirtualFileSystem implements IFileSystem {
 		}
 
 		this.checkWrite(parent, dirname(absPath));
-		parent.children.delete(name);
+		this.unlinkChild(parent, name);
 		this.touchMeta(parent.meta);
+	}
+
+	private unlinkChild(parent: MirageNode & { kind: "directory" }, name: string): void {
+		const child = parent.children.get(name);
+		if (child?.kind === "file") {
+			child.meta.nlink = Math.max((child.meta.nlink ?? 1) - 1, 0);
+			child.meta.ctime = Date.now();
+		}
+		parent.children.delete(name);
 	}
 
 	cp(src: string, dest: string, options?: { recursive?: boolean }): void {
@@ -474,10 +487,42 @@ export class VirtualFileSystem implements IFileSystem {
 		this.checkWrite(destParent, dirname(finalDest));
 
 		srcParent.children.delete(srcName);
+		if (destParent.children.has(destName)) {
+			this.unlinkChild(destParent, destName);
+		}
 		destParent.children.set(destName, srcChild);
 		this.touchMeta(srcParent.meta);
 		this.touchMeta(destParent.meta);
 		this.touchMeta(srcChild.meta);
+	}
+
+	link(src: string, dest: string): void {
+		const absSrc = this.resolvePath(src);
+		const absDest = this.resolvePath(dest);
+		const mountedSrc = this.getMountedFs(absSrc);
+		const mountedDest = this.getMountedFs(absDest);
+		if (mountedSrc || mountedDest) {
+			if (mountedSrc && mountedDest && mountedSrc[0] === mountedDest[0]) {
+				mountedSrc[0].link(mountedSrc[1], mountedDest[1]);
+				return;
+			}
+			throw new Error(`EXDEV: cross-device link not permitted: ${src} -> ${dest}`);
+		}
+
+		const node = this.resolveNode(absSrc);
+		if (!node) throw enoent(absSrc);
+		if (node.kind === "directory")
+			throw new Error(`EPERM: hardlink not permitted for directory: ${src}`);
+		if (node.kind !== "file") throw enoent(absSrc);
+
+		const [parent, name] = this.resolveParent(absDest);
+		this.checkWrite(parent, dirname(absDest));
+		if (parent.children.has(name)) throw eexist(absDest);
+
+		node.meta.nlink = (node.meta.nlink ?? 1) + 1;
+		node.meta.ctime = Date.now();
+		parent.children.set(name, node);
+		this.touchMeta(parent.meta);
 	}
 
 	chmod(path: string, mode: number): void {

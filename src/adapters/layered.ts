@@ -158,6 +158,10 @@ export class LayeredFileSystem implements IFileSystem {
 		}
 	}
 
+	link(src: string, dest: string): void {
+		this.writable.link(src, dest);
+	}
+
 	chmod(path: string, mode: number): void {
 		this.writable.chmod(path, mode);
 	}
