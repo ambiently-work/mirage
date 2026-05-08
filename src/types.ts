@@ -18,6 +18,19 @@ export interface MirageStats {
 	isSymlink(): boolean;
 }
 
+export interface MirageMount {
+	path: string;
+	kind: string;
+	source?: string;
+	options?: Record<string, unknown>;
+}
+
+export interface MirageMountOptions {
+	kind?: string;
+	source?: string;
+	options?: Record<string, unknown>;
+}
+
 export interface IFileSystem {
 	readFile(path: string): string;
 	/**
@@ -44,4 +57,5 @@ export interface IFileSystem {
 	readlink(path: string): string;
 	realpath(path: string): string;
 	glob(pattern: string, options?: { cwd?: string }): string[];
+	listMounts(): MirageMount[];
 }
