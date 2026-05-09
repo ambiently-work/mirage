@@ -54,5 +54,7 @@ export {
 	type SnapshotNode,
 	snapshot,
 } from "./snapshot.js";
+// Built-in tools
+export * from "./tools/builtins/index.js";
 export type { IFileSystem, MirageMount, MirageMountOptions, MirageStats } from "./types.js";
 export type { WasmGlobModule } from "./wasm.js";

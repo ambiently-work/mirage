@@ -61,9 +61,13 @@ async function writeLooseObject(
 }
 
 async function deflate(bytes: Uint8Array): Promise<Uint8Array> {
-	const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate"));
-	const compressed = await new Response(stream).arrayBuffer();
-	return new Uint8Array(compressed);
+	if (typeof CompressionStream === "function") {
+		const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate"));
+		const compressed = await new Response(stream).arrayBuffer();
+		return new Uint8Array(compressed);
+	}
+	const { deflateSync } = await import("node:zlib");
+	return deflateSync(bytes);
 }
 
 function concat(...chunks: Uint8Array[]): Uint8Array {
