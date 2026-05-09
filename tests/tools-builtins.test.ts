@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
 	CodeEvalBuiltins,
 	FilesystemBuiltins,
@@ -27,8 +27,9 @@ describe("built-in tools", () => {
 	});
 
 	test("shell allowlist", async () => {
-		const shell = new ShellBuiltins({ allowCommands: ["echo"] });
-		const result = await shell.runCommand("echo", ["ok"]);
+		const nodeCmd = process.execPath;
+		const shell = new ShellBuiltins({ allowCommands: [nodeCmd, basename(nodeCmd)] });
+		const result = await shell.runCommand(nodeCmd, ["-e", 'console.log("ok")']);
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout.trim()).toBe("ok");
 	});
