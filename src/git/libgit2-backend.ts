@@ -21,13 +21,11 @@
  *
  * Not yet implemented (throws): clone, push, pull. Clone/push/pull
  * need wasm-git's HTTP transport hooked up against a CORS-friendly server
- * which is out of scope for v1. Working-tree diff still needs a raw diff
- * command that compares HEAD/index/worktree; committed tree diff tries
- * `diff-tree --raw` and falls back to loose object traversal when this wasm
- * build does not expose that command.
+ * which is out of scope for v1. Diff compares loose git objects directly
+ * because the current wasm-git CLI build does not expose raw diff-tree output.
  */
 
-import { decodeUtf8 } from "../node.js";
+import { decodeUtf8, encodeUtf8 } from "../node.js";
 import type { IFileSystem } from "../types.js";
 import {
 	parseCommitTree,
@@ -209,30 +207,18 @@ export class LibGit2Backend implements GitBackend {
 
 	async diff(ctx: BackendContext, opts?: DiffOptions): Promise<DiffEntry[]> {
 		if (!opts?.b) {
-			throw new Error(
-				"LibGit2Backend.diff currently supports committed tree-to-tree diffs only; pass both { a, b }. HEAD-to-working-tree diff needs wasm-git command support for raw diff-index/diff-files output, while this backend currently uses diff-tree --raw.",
-			);
+			const aOid = await this.resolveRefOrEmpty(ctx, opts?.a ?? "HEAD");
+			return diffTreeToWorkingTree(ctx, aOid);
 		}
 		const a = opts.a ?? "HEAD";
-		try {
-			return await this.run(ctx, async (lg) => {
-				const out = captureOutput(lg, [
-					"diff-tree",
-					"--raw",
-					"--no-abbrev",
-					"-r",
-					"-z",
-					a,
-					opts.b as string,
-				]);
-				return parseRawDiffTreeOutput(out);
-			});
-		} catch (err) {
-			if (!isMissingDiffTreeCommand(err)) throw err;
-			const aOid = await this.resolveRef(ctx, a);
-			const bOid = await this.resolveRef(ctx, opts.b);
-			return diffLooseCommittedTrees(ctx, aOid, bOid);
-		}
+		const aOid = await this.resolveRef(ctx, a);
+		const bOid = await this.resolveRef(ctx, opts.b);
+		return diffLooseCommittedTrees(ctx, aOid, bOid);
+	}
+
+	private async resolveRefOrEmpty(ctx: BackendContext, ref: string): Promise<string | null> {
+		if (ref === "HEAD") return resolveHeadOid(ctx);
+		return this.resolveRef(ctx, ref);
 	}
 
 	async push(_ctx: BackendContext, _opts: PushOptions): Promise<void> {
@@ -454,16 +440,25 @@ function captureOutput(lg: Lg2Module, args: string[]): string {
 	}
 	// Fallback: install hooks ourselves.
 	const out: string[] = [];
+	const err: string[] = [];
 	const origPrint = lg.print;
+	const origPrintErr = lg.printErr;
 	lg.print = (msg) => {
 		out.push(msg);
 	};
+	lg.printErr = (msg) => {
+		err.push(msg);
+	};
 	try {
 		const code = lg.callMain(args);
-		if (code !== 0) throw new Error(`libgit2 ${args[0]} exited ${code}`);
+		if (code !== 0) {
+			const detail = err.length ? `: ${err.join("\n")}` : "";
+			throw new Error(`libgit2 ${args[0]} exited ${code}${detail}`);
+		}
 		return out.join("\n");
 	} finally {
 		lg.print = origPrint;
+		lg.printErr = origPrintErr;
 	}
 }
 
@@ -501,8 +496,16 @@ function parseRemotesFromConfig(config: string): { remote: string; url: string }
 	return out;
 }
 
-function isMissingDiffTreeCommand(err: unknown): boolean {
-	return String((err as Error)?.message ?? err).includes("Command not found: diff-tree");
+function resolveHeadOid(ctx: BackendContext): string | null {
+	const gitFs = typeof ctx.gitdir === "string" ? ctx.fs : ctx.gitdir;
+	const gitdir = typeof ctx.gitdir === "string" ? ctx.gitdir : "/";
+	const headPath = joinPath(gitdir, "HEAD");
+	if (!gitFs.exists(headPath)) return null;
+	const head = gitFs.readFile(headPath).trim();
+	const refMatch = /^ref:\s*(.+)$/.exec(head);
+	if (!refMatch) return /^[0-9a-f]{40}$/i.test(head) ? head.toLowerCase() : null;
+	const refPath = joinPath(gitdir, refMatch[1] as string);
+	return gitFs.exists(refPath) ? gitFs.readFile(refPath).trim().toLowerCase() : null;
 }
 
 async function diffLooseCommittedTrees(
@@ -518,6 +521,26 @@ async function diffLooseCommittedTrees(
 		flattenTree(gitFs, gitdir, aTree),
 		flattenTree(gitFs, gitdir, bTree),
 	]);
+	return diffFlattenedEntries(aEntries, bEntries);
+}
+
+async function diffTreeToWorkingTree(
+	ctx: BackendContext,
+	aOid: string | null,
+): Promise<DiffEntry[]> {
+	const gitFs = typeof ctx.gitdir === "string" ? ctx.fs : ctx.gitdir;
+	const gitdir = typeof ctx.gitdir === "string" ? ctx.gitdir : "/";
+	const aEntries = aOid
+		? await flattenTree(gitFs, gitdir, await resolveTreeOid(gitFs, gitdir, aOid))
+		: new Map<string, { oid: string }>();
+	const bEntries = await flattenWorkingTree(ctx.fs, ctx.dir);
+	return diffFlattenedEntries(aEntries, bEntries);
+}
+
+function diffFlattenedEntries(
+	aEntries: Map<string, { oid: string }>,
+	bEntries: Map<string, { oid: string }>,
+): DiffEntry[] {
 	const paths = new Set([...aEntries.keys(), ...bEntries.keys()]);
 	return Array.from(paths)
 		.sort()
@@ -565,6 +588,44 @@ async function flattenTree(
 		}
 	}
 	return out;
+}
+
+async function flattenWorkingTree(
+	fs: IFileSystem,
+	root: string,
+	dir: string = root,
+	prefix = "",
+): Promise<Map<string, { oid: string }>> {
+	const out = new Map<string, { oid: string }>();
+	for (const name of fs.readDir(dir)) {
+		if (!prefix && name === ".git") continue;
+		const path = joinPath(dir, name);
+		const rel = prefix ? `${prefix}/${name}` : name;
+		const stat = fs.lstat(path);
+		if (stat.isDirectory()) {
+			for (const [childPath, childEntry] of await flattenWorkingTree(fs, root, path, rel)) {
+				out.set(childPath, childEntry);
+			}
+			continue;
+		}
+		if (stat.isFile()) {
+			out.set(rel, { oid: await hashGitBlob(fs.readFileBytes(path)) });
+			continue;
+		}
+		if (stat.isSymlink()) {
+			out.set(rel, { oid: await hashGitBlob(encodeUtf8(fs.readlink(path))) });
+		}
+	}
+	return out;
+}
+
+async function hashGitBlob(body: Uint8Array): Promise<string> {
+	const header = encodeUtf8(`blob ${body.byteLength}\0`);
+	const payload = new Uint8Array(header.byteLength + body.byteLength);
+	payload.set(header);
+	payload.set(body, header.byteLength);
+	const digest = await crypto.subtle.digest("SHA-1", payload);
+	return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 export function parseRawDiffTreeOutput(out: string): DiffEntry[] {
