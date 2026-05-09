@@ -24,6 +24,9 @@ describe("built-in tools", () => {
 		expect(await fsTools.readFile("allowed/a.txt")).toBe("hello");
 		expect(await fsTools.listDir("allowed")).toEqual(["a.txt"]);
 		expect(await fsTools.glob("allowed/*.txt")).toEqual(["allowed/a.txt"]);
+		await expect(fsTools.writeFile("allowed-sibling/a.txt", "nope")).rejects.toThrow(
+			"Path is outside allowlist",
+		);
 	});
 
 	test("shell allowlist", async () => {

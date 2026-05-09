@@ -1,5 +1,5 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname, relative, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { globMatch } from "../../glob.js";
 
 export interface FilesystemToolsOptions {
@@ -9,10 +9,15 @@ export interface FilesystemToolsOptions {
 
 function allowedPath(rootDir: string, allowlist: string[], candidate: string): string {
 	const abs = resolve(rootDir, candidate);
-	if (!abs.startsWith(rootDir)) throw new Error("Path escapes configured root");
+	if (!isWithin(rootDir, abs)) throw new Error("Path escapes configured root");
 	if (allowlist.length === 0) return abs;
-	if (allowlist.some((prefix) => abs.startsWith(resolve(rootDir, prefix)))) return abs;
+	if (allowlist.some((prefix) => isWithin(resolve(rootDir, prefix), abs))) return abs;
 	throw new Error("Path is outside allowlist");
+}
+
+function isWithin(parent: string, candidate: string): boolean {
+	const rel = relative(parent, candidate);
+	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
 async function walkFiles(rootDir: string, baseDir: string): Promise<string[]> {
@@ -20,7 +25,7 @@ async function walkFiles(rootDir: string, baseDir: string): Promise<string[]> {
 	for (const entry of await readdir(baseDir, { withFileTypes: true })) {
 		const full = resolve(baseDir, entry.name);
 		if (entry.isDirectory()) out.push(...(await walkFiles(rootDir, full)));
-		if (entry.isFile()) out.push(relative(rootDir, full));
+		if (entry.isFile()) out.push(relative(rootDir, full).replaceAll("\\", "/"));
 	}
 	return out;
 }
