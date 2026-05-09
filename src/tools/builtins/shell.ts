@@ -34,8 +34,12 @@ export class ShellBuiltins {
 				timedOut = true;
 				child.kill("SIGKILL");
 			}, this.timeoutMs);
-			child.stdout.on("data", (chunk) => (stdout += chunk.toString()));
-			child.stderr.on("data", (chunk) => (stderr += chunk.toString()));
+			child.stdout.on("data", (chunk) => {
+				stdout += chunk.toString();
+			});
+			child.stderr.on("data", (chunk) => {
+				stderr += chunk.toString();
+			});
 			child.on("error", reject);
 			child.on("close", (exitCode) => {
 				clearTimeout(timer);

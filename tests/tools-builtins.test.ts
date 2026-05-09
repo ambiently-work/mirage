@@ -35,10 +35,16 @@ describe("built-in tools", () => {
 	});
 
 	test("http allowlist", async () => {
-		const http = new HttpBuiltins({ allowlist: ["https://example.com"] });
-		const result = await http.httpRequest("https://example.com");
-		expect(result.status).toBeGreaterThanOrEqual(200);
-		expect(result.status).toBeLessThan(500);
+		const originalFetch = globalThis.fetch;
+		globalThis.fetch = async () => new Response("ok", { status: 201 });
+		try {
+			const url = "https://allowed.example/test";
+			const http = new HttpBuiltins({ allowlist: [url] });
+			const result = await http.httpRequest(url);
+			expect(result).toEqual({ status: 201, body: "ok" });
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
 	});
 
 	test("search adapter", async () => {
