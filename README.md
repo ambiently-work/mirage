@@ -121,9 +121,11 @@ const blob = await git.readBlob(oid, "src/index.ts");
 **Picking a backend.** `IsoGitBackend` (default) is pure JS — clone/push/pull
 against any HTTPS git host that supports the smart protocol, full diff/walk
 support, smallest install. `LibGit2Backend` uses libgit2 compiled to WASM
-(via `wasm-git`) and supports init/add/commit/log/status/diff/branch/checkout but
-not clone/push/pull in v1; it's swappable so you can opt in for libgit2
-semantics where you need them. Both implement the same `GitBackend` interface.
+(via `wasm-git`) for local repository operations including
+init/add/commit/log/status/diff/branch/checkout, with clone/push/pull routed
+through the same mirage-backed git storage using isomorphic-git's HTTP
+transport. It's swappable so you can opt in for libgit2 semantics where you
+need them. Both implement the same `GitBackend` interface.
 
 **Sidecar `.git/`.** Pass an `IFileSystem` instead of a path for `gitdir` to
 keep `.git/` out of the working-tree mirage. Useful when `snapshot(fs)` should
