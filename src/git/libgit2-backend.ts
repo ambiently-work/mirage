@@ -15,20 +15,28 @@
  * (e.g. specific merge strategies, future signing) and as a swappable
  * second engine that proves the backend interface is real.
  *
- * Currently implemented: init / add / commit / log / status / branch /
- * listBranches / currentBranch / checkout / resolveRef / diff committed
- * trees / listRemotes / addRemote / readBlob.
+ * Currently implemented through libgit2: init / add / commit / log / status /
+ * branch / listBranches / currentBranch / checkout / resolveRef / diff
+ * committed trees / listRemotes / addRemote / readBlob.
  *
- * Not yet implemented (throws): clone, push, pull. Clone/push/pull
- * need wasm-git's HTTP transport hooked up against a CORS-friendly server
- * which is out of scope for v1. Working-tree diff still needs a raw diff
- * command that compares HEAD/index/worktree; committed tree diff tries
- * `diff-tree --raw` and falls back to loose object traversal when this wasm
- * build does not expose that command.
+ * Remote operations (clone / push / pull) use isomorphic-git's HTTP transport
+ * over the same mirage-backed `.git` layout. wasm-git's bundled `lg2` CLI has
+ * remote commands, but clone does not expose depth/ref flags and push is
+ * hardcoded to `origin/master`; routing HTTP through the JS transport gives the
+ * `GitBackend` interface parity while preserving libgit2 for local repository
+ * semantics after the network operation lands on disk.
+ *
+ * Working-tree diff still needs a raw diff command that compares
+ * HEAD/index/worktree; committed tree diff tries `diff-tree --raw` and falls
+ * back to loose object traversal when this wasm build does not expose that
+ * command.
  */
 
+import isoGit from "isomorphic-git";
+import isoHttp from "isomorphic-git/http/web";
 import { decodeUtf8 } from "../node.js";
 import type { IFileSystem } from "../types.js";
+import { makeIsoGitFs } from "./fs-adapter.js";
 import {
 	parseCommitTree,
 	parseTreeEntries,
@@ -87,15 +95,27 @@ export interface LibGit2BackendOptions {
 	 * needs a worker) or `lg2_opfs.js` (OPFS-backed) builds.
 	 */
 	loader?: Lg2Loader;
+	/**
+	 * HTTP transport for remote operations. Defaults to
+	 * `isomorphic-git/http/web`, which uses fetch and supports Bun, browsers,
+	 * workerd, and modern Node.
+	 */
+	http?: typeof isoHttp;
+	/** Override the isomorphic-git module used for remote operations. */
+	git?: typeof isoGit;
 }
 
 export class LibGit2Backend implements GitBackend {
 	readonly name = "libgit2-wasm" as const;
 	private modulePromise?: Promise<Lg2Module>;
 	private readonly loader: Lg2Loader;
+	private readonly http: typeof isoHttp;
+	private readonly remoteGit: typeof isoGit;
 
 	constructor(options?: LibGit2BackendOptions) {
 		this.loader = options?.loader ?? defaultLoader;
+		this.http = options?.http ?? isoHttp;
+		this.remoteGit = options?.git ?? isoGit;
 	}
 
 	async init(ctx: BackendContext, opts?: InitOptions): Promise<void> {
@@ -112,8 +132,18 @@ export class LibGit2Backend implements GitBackend {
 		);
 	}
 
-	async clone(_ctx: BackendContext, _opts: CloneOptions): Promise<void> {
-		throw new Error("LibGit2Backend.clone is not implemented in v1 — use IsoGitBackend for clone");
+	async clone(ctx: BackendContext, opts: CloneOptions): Promise<void> {
+		await this.remoteGit.clone({
+			...this.fsArgs(ctx),
+			http: this.http,
+			url: opts.url,
+			ref: opts.ref,
+			depth: opts.depth === Infinity ? undefined : (opts.depth ?? 1),
+			singleBranch: opts.singleBranch ?? true,
+			corsProxy: opts.corsProxy,
+			onAuth: opts.onAuth as never,
+			headers: opts.headers,
+		});
 	}
 
 	async status(ctx: BackendContext): Promise<StatusRow[]> {
@@ -146,15 +176,17 @@ export class LibGit2Backend implements GitBackend {
 
 	async log(ctx: BackendContext, opts?: LogOptions): Promise<CommitInfo[]> {
 		return this.run(ctx, async (lg) => {
-			const args = [
-				"log",
-				"--pretty=format:%H%x00%T%x00%P%x00%an%x00%ae%x00%at%x00%cn%x00%ce%x00%ct%x00%B%x1e",
-			];
-			if (opts?.depth !== undefined) args.push(`-n${opts.depth}`);
+			if (!opts?.filepath) {
+				return readCommitChain(lg, opts?.ref ?? "HEAD", opts?.depth);
+			}
+			const args = ["log"];
+			if (opts?.depth !== undefined && opts.depth !== Infinity) args.push(`-${opts.depth}`);
 			if (opts?.ref) args.push(opts.ref);
-			if (opts?.filepath) args.push("--", opts.filepath);
+			args.push("--", opts.filepath);
 			const out = captureOutput(lg, args);
-			return parseLogOutput(out);
+			return parseLogCommitOids(out).map((oid) =>
+				parseCatFileCommit(oid, captureOutput(lg, ["cat-file", "-p", oid])),
+			);
 		});
 	}
 
@@ -235,12 +267,35 @@ export class LibGit2Backend implements GitBackend {
 		}
 	}
 
-	async push(_ctx: BackendContext, _opts: PushOptions): Promise<void> {
-		throw new Error("LibGit2Backend.push is not implemented in v1 — use IsoGitBackend.push");
+	async push(ctx: BackendContext, opts: PushOptions): Promise<void> {
+		await this.remoteGit.push({
+			...this.fsArgs(ctx),
+			http: this.http,
+			url: opts.url,
+			remote: opts.remote,
+			ref: opts.ref,
+			remoteRef: opts.remoteRef,
+			force: opts.force,
+			corsProxy: opts.corsProxy,
+			onAuth: opts.onAuth as never,
+			headers: opts.headers,
+		});
 	}
 
-	async pull(_ctx: BackendContext, _opts: PullOptions): Promise<void> {
-		throw new Error("LibGit2Backend.pull is not implemented in v1 — use IsoGitBackend.pull");
+	async pull(ctx: BackendContext, opts: PullOptions): Promise<void> {
+		await this.remoteGit.pull({
+			...this.fsArgs(ctx),
+			http: this.http,
+			url: opts.url,
+			remote: opts.remote,
+			ref: opts.ref,
+			remoteRef: opts.remoteRef,
+			fastForwardOnly: opts.fastForwardOnly,
+			corsProxy: opts.corsProxy,
+			onAuth: opts.onAuth as never,
+			headers: opts.headers,
+			author: opts.author,
+		});
 	}
 
 	async listRemotes(ctx: BackendContext): Promise<{ remote: string; url: string }[]> {
@@ -287,6 +342,25 @@ export class LibGit2Backend implements GitBackend {
 			throw err;
 		}
 	}
+
+	private fsArgs(ctx: BackendContext): {
+		fs: ReturnType<typeof makeIsoGitFs>;
+		dir: string;
+		gitdir?: string;
+	} {
+		const fs = makeIsoGitFs(ctx.fs, ctx.gitdir, ctx.dir);
+		const args: { fs: typeof fs; dir: string; gitdir?: string } = { fs, dir: ctx.dir };
+		if (typeof ctx.gitdir === "string") {
+			args.gitdir = ctx.gitdir;
+		} else {
+			args.gitdir = `${trimTrailingSlash(ctx.dir)}/.git`;
+		}
+		return args;
+	}
+}
+
+function trimTrailingSlash(s: string): string {
+	return s.length > 1 && s.endsWith("/") ? s.slice(0, -1) : s;
 }
 
 const defaultLoader: Lg2Loader = async (overrides) => {
@@ -666,43 +740,82 @@ function parsePorcelainV2(out: string): StatusRow[] {
 	return rows;
 }
 
-function parseLogOutput(out: string): CommitInfo[] {
-	const records = out.split("").filter((r) => r.trim().length > 0);
+function parseLogCommitOids(out: string): string[] {
+	return out
+		.split("\n")
+		.map((line) => /^commit ([0-9a-f]{40})$/i.exec(line.trim())?.[1]?.toLowerCase())
+		.filter((oid): oid is string => !!oid);
+}
+
+function readCommitChain(lg: Lg2Module, ref: string, depth?: number): CommitInfo[] {
+	const first = captureOutput(lg, ["rev-parse", ref]).trim();
+	if (!first) return [];
+	const limit = depth === undefined || depth === Infinity ? Number.POSITIVE_INFINITY : depth;
 	const commits: CommitInfo[] = [];
-	for (const rec of records) {
-		const fields = rec.split("\0");
-		if (fields.length < 10) continue;
-		const [oid, tree, parents, an, ae, at, cn, ce, ct, ...messageParts] = fields as [
-			string,
-			string,
-			string,
-			string,
-			string,
-			string,
-			string,
-			string,
-			string,
-			...string[],
-		];
-		const msg = messageParts.join("\0").replace(/^\n+/, "").replace(/\n+$/, "");
-		commits.push({
-			oid: oid.trim(),
-			tree,
-			parents: parents.trim() ? parents.trim().split(" ") : [],
-			author: {
-				name: an,
-				email: ae,
-				timestamp: Number(at),
-				timezoneOffset: 0,
-			},
-			committer: {
-				name: cn,
-				email: ce,
-				timestamp: Number(ct),
-				timezoneOffset: 0,
-			},
-			message: msg,
-		});
+	const seen = new Set<string>();
+	const pending = [first];
+	while (pending.length && commits.length < limit) {
+		const oid = pending.shift() as string;
+		if (seen.has(oid)) continue;
+		seen.add(oid);
+		const commit = parseCatFileCommit(oid, captureOutput(lg, ["cat-file", "-p", oid]));
+		commits.push(commit);
+		pending.push(...commit.parents.filter((parent) => !seen.has(parent)));
 	}
 	return commits;
+}
+
+function parseCatFileCommit(oid: string, out: string): CommitInfo {
+	const [rawHeader = "", ...messageParts] = out.split(/\r?\n\r?\n/);
+	const headers = rawHeader.split(/\r?\n/);
+	const tree = headers
+		.find((line) => line.startsWith("tree "))
+		?.slice(5)
+		.trim();
+	if (!tree) throw new Error(`Commit ${oid} is missing its tree header`);
+	const parents = headers
+		.filter((line) => line.startsWith("parent "))
+		.map((line) => line.slice(7).trim());
+	const author = parseCommitSignature(
+		headers.find((line) => line.startsWith("author ")),
+		oid,
+		"author",
+	);
+	const committer = parseCommitSignature(
+		headers.find((line) => line.startsWith("committer ")),
+		oid,
+		"committer",
+	);
+	return {
+		oid,
+		tree,
+		parents,
+		author,
+		committer,
+		message: messageParts.join("\n\n").replace(/\n+$/, ""),
+	};
+}
+
+function parseCommitSignature(
+	line: string | undefined,
+	oid: string,
+	kind: "author" | "committer",
+): GitIdentity & { timestamp: number; timezoneOffset: number } {
+	const match = /^(?:author|committer) (.*) <([^<>]*)> ([0-9]+) ([+-])([0-9]{2})([0-9]{2})$/.exec(
+		line ?? "",
+	);
+	if (!match) throw new Error(`Commit ${oid} is missing its ${kind} signature`);
+	const name = match[1] as string;
+	const email = match[2] as string;
+	const timestamp = match[3] as string;
+	const sign = match[4] as "+" | "-";
+	const hours = match[5] as string;
+	const minutes = match[6] as string;
+	const offset = Number(hours) * 60 + Number(minutes);
+	return {
+		name,
+		email,
+		timestamp: Number(timestamp),
+		timezoneOffset: sign === "-" ? -offset : offset,
+	};
 }
