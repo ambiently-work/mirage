@@ -26,8 +26,14 @@ export {
 } from "./gitignore.js";
 // Glob
 export { globFiles, globMatch, useWasmGlob } from "./glob.js";
-export type { MirageNode, NodeMeta } from "./node.js";
-export { createDirectory, createFile, createSymlink, defaultMeta } from "./node.js";
+export type { MirageNode, NodeMeta, SpecialFileHandlers } from "./node.js";
+export {
+	createDirectory,
+	createFile,
+	createSpecialFile,
+	createSymlink,
+	defaultMeta,
+} from "./node.js";
 // Path utilities
 export {
 	basename,
@@ -48,5 +54,7 @@ export {
 	type SnapshotNode,
 	snapshot,
 } from "./snapshot.js";
+// Built-in tools
+export * from "./tools/builtins/index.js";
 export type { IFileSystem, MirageMount, MirageMountOptions, MirageStats } from "./types.js";
 export type { WasmGlobModule } from "./wasm.js";

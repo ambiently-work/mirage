@@ -79,14 +79,6 @@ describe("LibGit2Backend — write flow", () => {
 	});
 });
 
-describe("LibGit2Backend — unsupported ops", () => {
-	test("working-tree diff throws a descriptive error", async () => {
-		const { git } = newGit();
-		await git.init({ defaultBranch: "main" });
-		await expect(git.diff()).rejects.toThrow(/tree-to-tree/);
-	});
-});
-
 describe("LibGit2Backend — HTTP remotes", () => {
 	test("clone reads a smart-HTTP repo and libgit2 can read the result", async () => {
 		const remote = await createGitHttpRemote();
@@ -170,6 +162,8 @@ describe("LibGit2Backend — diff", () => {
 		const after = "2222222222222222222222222222222222222222";
 		const added = "3333333333333333333333333333333333333333";
 		const removed = "4444444444444444444444444444444444444444";
+		const typeChangedA = "5555555555555555555555555555555555555555";
+		const typeChangedB = "6666666666666666666666666666666666666666";
 		const out = [
 			`:100644 100644 ${before} ${after} M`,
 			"changed λ file.txt",
@@ -177,6 +171,8 @@ describe("LibGit2Backend — diff", () => {
 			"added.txt",
 			`:100644 000000 ${removed} 0000000000000000000000000000000000000000 D`,
 			"removed.txt",
+			`:100644 120000 ${typeChangedA} ${typeChangedB} T`,
+			"type changed.txt",
 			"",
 		].join("\0");
 
@@ -184,6 +180,13 @@ describe("LibGit2Backend — diff", () => {
 			{ path: "changed λ file.txt", added: false, removed: false, aOid: before, bOid: after },
 			{ path: "added.txt", added: true, removed: false, aOid: null, bOid: added },
 			{ path: "removed.txt", added: false, removed: true, aOid: removed, bOid: null },
+			{
+				path: "type changed.txt",
+				added: false,
+				removed: false,
+				aOid: typeChangedA,
+				bOid: typeChangedB,
+			},
 		]);
 	});
 
@@ -219,6 +222,49 @@ describe("LibGit2Backend — diff", () => {
 		expect(byPath.get("b.txt")).toMatchObject({ added: false, removed: true, bOid: null });
 		expect(byPath.get("c.txt")).toMatchObject({ added: true, removed: false, aOid: null });
 		expect(diff.map((d) => d.path).sort()).toEqual(["a.txt", "b.txt", "c.txt"]);
+	});
+
+	test("diffs HEAD against working tree changes", async () => {
+		const { git, fs } = newGit();
+		await git.init({ defaultBranch: "main" });
+		fs.writeFile("/workspace/changed.txt", "one");
+		fs.writeFile("/workspace/removed.txt", "bye");
+		await git.add(["changed.txt", "removed.txt"]);
+		await git.commit({ message: "feat: base" });
+
+		fs.writeFile("/workspace/changed.txt", "two");
+		fs.rm("/workspace/removed.txt", { force: true });
+		fs.writeFile("/workspace/added.txt", "hello");
+
+		const diff = await git.diff();
+		const byPath = new Map(diff.map((d) => [d.path, d]));
+		expect(byPath.get("changed.txt")).toMatchObject({ added: false, removed: false });
+		expect(byPath.get("changed.txt")?.aOid).toMatch(/^[0-9a-f]{40}$/);
+		expect(byPath.get("changed.txt")?.bOid).toMatch(/^[0-9a-f]{40}$/);
+		expect(byPath.get("removed.txt")).toMatchObject({
+			added: false,
+			removed: true,
+			bOid: null,
+		});
+		expect(byPath.get("added.txt")).toMatchObject({ added: true, removed: false, aOid: null });
+		expect(diff.map((d) => d.path)).toEqual(["added.txt", "changed.txt", "removed.txt"]);
+	});
+
+	test("includes files added to an unborn working tree", async () => {
+		const { git, fs } = newGit();
+		await git.init({ defaultBranch: "main" });
+		fs.writeFile("/workspace/added then staged.txt", "hello");
+		await git.add("added then staged.txt");
+
+		const diff = await git.diff();
+		expect(diff).toHaveLength(1);
+		expect(diff[0]).toMatchObject({
+			path: "added then staged.txt",
+			added: true,
+			removed: false,
+			aOid: null,
+		});
+		expect(diff[0]?.bOid).toMatch(/^[0-9a-f]{40}$/);
 	});
 });
 

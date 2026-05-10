@@ -16,12 +16,20 @@ export interface NodeMeta {
 	nlink?: number;
 }
 
+export interface SpecialFileHandlers {
+	read?: (path: string) => string | Uint8Array;
+	write?: (path: string, content: Uint8Array) => void;
+	append?: (path: string, content: Uint8Array) => void;
+	size?: number | (() => number);
+}
+
 let nextInode = 1;
 
 export type MirageNode =
 	| { kind: "file"; content: Uint8Array; meta: NodeMeta }
 	| { kind: "directory"; children: Map<string, MirageNode>; meta: NodeMeta }
-	| { kind: "symlink"; target: string; meta: NodeMeta };
+	| { kind: "symlink"; target: string; meta: NodeMeta }
+	| { kind: "special"; handlers: SpecialFileHandlers; meta: NodeMeta };
 
 export function defaultMeta(mode: number): NodeMeta {
 	const now = Date.now();
@@ -59,6 +67,14 @@ export function createSymlink(target: string): MirageNode {
 		kind: "symlink",
 		target,
 		meta: defaultMeta(0o777),
+	};
+}
+
+export function createSpecialFile(handlers: SpecialFileHandlers, mode: number = 0o666): MirageNode {
+	return {
+		kind: "special",
+		handlers,
+		meta: defaultMeta(mode),
 	};
 }
 

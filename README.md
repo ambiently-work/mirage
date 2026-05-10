@@ -121,7 +121,8 @@ const blob = await git.readBlob(oid, "src/index.ts");
 **Picking a backend.** `IsoGitBackend` (default) is pure JS — clone/push/pull
 against any HTTPS git host that supports the smart protocol, full diff/walk
 support, smallest install. `LibGit2Backend` uses libgit2 compiled to WASM
-(via `wasm-git`) for local repository operations, with clone/push/pull routed
+(via `wasm-git`) for local repository operations including
+init/add/commit/log/status/diff/branch/checkout, with clone/push/pull routed
 through the same mirage-backed git storage using isomorphic-git's HTTP
 transport. It's swappable so you can opt in for libgit2 semantics where you
 need them. Both implement the same `GitBackend` interface.
@@ -231,3 +232,15 @@ fs.readFile("/src/index.ts"); // "export const x = 1;\n"
 ## License
 
 MIT © ambiently
+
+## Built-in native tools
+
+Mirage now exports a set of built-in native tools from `src/tools/builtins`:
+
+- `FilesystemBuiltins` (`readFile`, `writeFile`, `listDir`, `glob`) constrained to a configured `rootDir` and optional path allowlist.
+- `ShellBuiltins` (`runCommand`) constrained to an explicit command allowlist with timeout, stdout/stderr capture, and exit code.
+- `HttpBuiltins` (`httpRequest`) constrained to a URL allowlist and a response size cap.
+- `SearchBuiltins` (`webSearch`) with a pluggable adapter interface for provider integrations.
+- `CodeEvalBuiltins` (`evaluate`) that delegates one-shot TypeScript execution to a provided sandbox adapter.
+
+All built-ins require explicit configuration at construction time to avoid ambient authority.

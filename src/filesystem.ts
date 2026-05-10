@@ -1,6 +1,13 @@
 import { globMatch } from "./glob.js";
-import type { MirageNode, NodeMeta } from "./node.js";
-import { createDirectory, createFile, createSymlink, decodeUtf8, encodeUtf8 } from "./node.js";
+import type { MirageNode, NodeMeta, SpecialFileHandlers } from "./node.js";
+import {
+	createDirectory,
+	createFile,
+	createSpecialFile,
+	createSymlink,
+	decodeUtf8,
+	encodeUtf8,
+} from "./node.js";
 import { basename, dirname, isAbsolute, join, normalize, resolve, split } from "./path.js";
 import type { IFileSystem, MirageMount, MirageMountOptions, MirageStats } from "./types.js";
 
@@ -8,7 +15,12 @@ const MAX_SYMLINK_HOPS = 40;
 
 function makeStats(node: MirageNode): MirageStats {
 	const meta = node.meta;
-	const size = node.kind === "file" ? node.content.length : 0;
+	const size =
+		node.kind === "file"
+			? node.content.length
+			: node.kind === "special"
+				? specialFileSize(node.handlers)
+				: 0;
 	const nlink = meta.nlink ?? 1;
 	return {
 		size,
@@ -22,10 +34,38 @@ function makeStats(node: MirageNode): MirageStats {
 		rev: meta.rev,
 		nlink,
 		nlinks: nlink,
-		isFile: () => node.kind === "file",
+		isFile: () => node.kind === "file" || node.kind === "special",
 		isDirectory: () => node.kind === "directory",
 		isSymlink: () => node.kind === "symlink",
 	};
+}
+
+function specialFileSize(handlers: SpecialFileHandlers): number {
+	if (typeof handlers.size === "function") return handlers.size();
+	return handlers.size ?? 0;
+}
+
+function readSpecialFile(node: MirageNode & { kind: "special" }, path: string): Uint8Array {
+	if (!node.handlers.read) return new Uint8Array();
+	const content = node.handlers.read(path);
+	return typeof content === "string" ? encodeUtf8(content) : content;
+}
+
+function writeSpecialFile(
+	node: MirageNode & { kind: "special" },
+	path: string,
+	content: Uint8Array,
+	append = false,
+): void {
+	if (append && node.handlers.append) {
+		node.handlers.append(path, content);
+		return;
+	}
+	if (node.handlers.write) {
+		node.handlers.write(path, content);
+		return;
+	}
+	throw eacces(path);
 }
 
 function enoent(path: string): Error {
@@ -257,6 +297,11 @@ export class VirtualFileSystem implements IFileSystem {
 		const node = this.resolveNode(absPath);
 		if (!node) throw enoent(absPath);
 		if (node.kind === "directory") throw eisdir(absPath);
+		if (node.kind === "special") {
+			this.checkRead(node, absPath);
+			node.meta.atime = Date.now();
+			return readSpecialFile(node, absPath);
+		}
 		if (node.kind !== "file") throw enoent(absPath);
 		this.checkRead(node, absPath);
 		node.meta.atime = Date.now();
@@ -322,6 +367,12 @@ export class VirtualFileSystem implements IFileSystem {
 		if (existing) {
 			const resolved = this.resolveNode(absPath);
 			if (resolved && resolved.kind === "directory") throw eisdir(absPath);
+			if (resolved && resolved.kind === "special") {
+				this.checkWrite(resolved, absPath);
+				writeSpecialFile(resolved, absPath, content);
+				this.touchMeta(resolved.meta);
+				return;
+			}
 			if (resolved && resolved.kind === "file") {
 				this.checkWrite(resolved, absPath);
 				resolved.content = content;
@@ -337,6 +388,23 @@ export class VirtualFileSystem implements IFileSystem {
 		this.touchMeta(parent.meta);
 	}
 
+	specialFile(path: string, handlers: SpecialFileHandlers, options?: { mode?: number }): void {
+		const absPath = this.resolvePath(path);
+		const mounted = this.getMountedFs(absPath);
+		if (mounted)
+			throw new Error(`EXDEV: cannot create special file through mounted filesystem: ${path}`);
+
+		const [parent, name] = this.resolveParent(absPath);
+		this.checkWrite(parent, dirname(absPath));
+		if (parent.children.has(name)) throw eexist(absPath);
+
+		const file = createSpecialFile(handlers, options?.mode);
+		file.meta.uid = this._uid;
+		file.meta.gid = this._gid;
+		parent.children.set(name, file);
+		this.touchMeta(parent.meta);
+	}
+
 	appendFile(path: string, content: string): void {
 		const absPath = this.resolvePath(path);
 		const mounted = this.getMountedFs(absPath);
@@ -344,16 +412,21 @@ export class VirtualFileSystem implements IFileSystem {
 			mounted[0].appendFile(mounted[1], content);
 			return;
 		}
-		try {
-			const existing = this.readFile(absPath);
-			this.writeFile(absPath, existing + content);
-		} catch (err) {
-			if (err instanceof Error && err.message.startsWith("ENOENT")) {
-				this.writeFile(absPath, content);
-			} else {
-				throw err;
-			}
+		const node = this.resolveNode(absPath);
+		if (node?.kind === "special") {
+			this.checkWrite(node, absPath);
+			writeSpecialFile(node, absPath, encodeUtf8(content), true);
+			this.touchMeta(node.meta);
+			return;
 		}
+
+		if (!node) {
+			this.writeFile(absPath, content);
+			return;
+		}
+
+		const existing = this.readFile(absPath);
+		this.writeFile(absPath, existing + content);
 	}
 
 	mkdir(path: string, options?: { recursive?: boolean }): void {
