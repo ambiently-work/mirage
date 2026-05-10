@@ -1,56 +1,56 @@
-# mirage
+# @ambiently-work/mirage
 
-A **pluggable, in-process virtual filesystem** written in TypeScript. Works in the browser, in Bun, in Node, and inside sandboxes — with no `node:fs` dependency in the core. Ships with layered overlays, hookable write adapters, HTTP/object-backed adapters, snapshot/restore, a built-in `.gitignore` matcher, and Node-only helpers for loading a real repo (or a git URL) into and back out of the mirage.
+In-process virtual filesystem for TypeScript runtimes: Node, Bun, browsers, and workerd-style sandboxes.
 
-Built for agents, sandboxes, REPLs, and anything that needs "a filesystem without a filesystem."
+Use Mirage when you need filesystem behavior without host disk access: agent sandboxes, code transforms, previews, tests, REPLs, and short-lived workspaces.
+
+## Install
+
+```bash
+bun add @ambiently-work/mirage
+# or
+npm i @ambiently-work/mirage
+# or
+pnpm add @ambiently-work/mirage
+```
+
+## Quickstart
 
 ```ts
 import { VirtualFileSystem } from "@ambiently-work/mirage";
 
 const fs = new VirtualFileSystem({
-  files: { "/src/index.ts": "export const hi = 'world';\n" },
+  files: { "/app/index.ts": "export const hello = 'world'\n" },
 });
 
-fs.writeFile("/src/index.ts", "export const hi = 'mirage';\n");
-console.log(fs.readFile("/src/index.ts"));
+fs.writeFile("/app/index.ts", "export const hello = 'mirage'\n");
+console.log(fs.readFile("/app/index.ts"));
 ```
 
-## Features
+## What you get
 
-- **POSIX-ish semantics** — `readFile`, `writeFile`, `mkdir`, `rm`, `mv`, `cp`, symlinks, `chmod`, glob, ...
-- **`IFileSystem` interface** — one contract, plug anything in (in-memory, object, HTTP, layered, read-only, your own).
-- **Mount points** — compose filesystems at arbitrary paths.
-- **Snapshot / restore** — dump the whole FS (including symlinks and modes) and rehydrate it later.
-- **Layered overlays** — a writable scratch layer on top of an immutable base.
-- **Write hooks** — attach formatters and linters by glob, extension, path, or content.
-- **Disk loaders** (optional, `/disk` export) — load a directory from disk (with `.gitignore` support), or write the mirage back out.
-- **In-process git** (optional, `/git` export) — `MirageGit` runs `clone`/`add`/`commit`/`status`/`diff`/`log`/`branch`/`checkout`/`push`/`pull` directly against the mirage in browsers, workerd, Bun, and Node. Two pluggable backends: `IsoGitBackend` (isomorphic-git, pure JS) and `LibGit2Backend` (libgit2-via-WASM). `.git/` lives in-tree by default, or in a sidecar filesystem on request.
-- **Git CLI loaders** (Node-only, `/git-cli` export) — clone a URL or hydrate from a local repo via the `git` binary; save back out as a fresh repo.
-- **Built-in `.gitignore` matcher** — pure JS, browser-safe.
-- **Binary-safe storage** — `readFileBytes` / `writeFileBytes` round-trip arbitrary bytes; the string API encodes/decodes UTF-8.
+- POSIX-like file APIs: `readFile`, `writeFile`, `mkdir`, `rm`, `mv`, `cp`, symlinks, chmod, glob, and byte reads/writes.
+- An `IFileSystem` contract for swapping implementations.
+- Mount points and composable adapters.
+- Snapshot/restore for full in-memory state transfer.
+- Layered overlays for scratch edits on top of immutable bases.
+- Hooked writes for formatters, linters, and guardrails.
+- Browser-safe `.gitignore` matching.
+- In-process git through `MirageGit` with swappable backends.
+- Node-only disk and git CLI loaders for real checkouts.
+- Explicitly configured built-in tools for filesystem, shell, HTTP, search, and code evaluation integrations.
 
-## Packages
-
-Single package: `@ambiently-work/mirage`. Five entry points:
-
-- `@ambiently-work/mirage` — core (browser + server safe), incl. `GitIgnore` matcher.
-- `@ambiently-work/mirage/disk` — Node-only `loadFromDisk` / `saveToDisk`.
-- `@ambiently-work/mirage/git` — browser-safe in-process git (`MirageGit`, `IsoGitBackend`, `LibGit2Backend`).
-- `@ambiently-work/mirage/git-cli` — Node-only `loadFromGit` / `saveAsGitRepo` (requires the `git` binary).
-- `@ambiently-work/mirage/hooks` — `HookedFileSystem` write-hook adapter.
-
-## Usage
-
-### Basic
+## Entry points
 
 ```ts
 import { VirtualFileSystem } from "@ambiently-work/mirage";
-
-const fs = new VirtualFileSystem();
-fs.mkdir("/src", { recursive: true });
-fs.writeFile("/src/hello.txt", "hi");
-fs.readDir("/src"); // ["hello.txt"]
+import { loadFromDisk, saveToDisk } from "@ambiently-work/mirage/disk"; // Node-only
+import { MirageGit, IsoGitBackend, LibGit2Backend } from "@ambiently-work/mirage/git";
+import { loadFromGit, saveAsGitRepo } from "@ambiently-work/mirage/git-cli"; // Node-only, requires `git`
+import { HookedFileSystem } from "@ambiently-work/mirage/hooks";
 ```
+
+## Core examples
 
 ### Snapshot and restore
 
@@ -59,16 +59,60 @@ import { VirtualFileSystem, snapshot, restore } from "@ambiently-work/mirage";
 
 const fs = new VirtualFileSystem({ files: { "/a.txt": "hello" } });
 const snap = snapshot(fs);
+const restored = restore(snap);
 
-// serialize, stash somewhere…
-const json = JSON.stringify(snap);
+console.log(restored.readFile("/a.txt")); // hello
+```
 
-// later:
-const restored = restore(JSON.parse(json));
-restored.readFile("/a.txt"); // "hello"
+### Layered sandbox
+
+Use a writable overlay on top of an immutable base filesystem.
+
+```ts
+import { LayeredFileSystem, ReadOnlyFileSystem, VirtualFileSystem } from "@ambiently-work/mirage";
+
+const base = new ReadOnlyFileSystem(
+  new VirtualFileSystem({ files: { "/project/config.json": "{}\n" } }),
+);
+const overlay = new VirtualFileSystem();
+const fs = new LayeredFileSystem(overlay, base);
+
+fs.writeFile("/project/config.json", '{"edited":true}\n');
+console.log(fs.readFile("/project/config.json")); // {"edited":true}
+```
+
+### Hooked writes
+
+Wrap a filesystem with `HookedFileSystem` to run formatters or validation before writes land.
+
+```ts
+import { HookedFileSystem, VirtualFileSystem } from "@ambiently-work/mirage";
+
+const fs = new HookedFileSystem(new VirtualFileSystem(), {
+  rules: [
+    {
+      glob: "/src/**/*.ts",
+      extensions: "ts",
+      hook: (content) => {
+        if (typeof content !== "string") return;
+        return `${content.trim()}\n`;
+      },
+    },
+    {
+      extensions: ["ts", "tsx"],
+      hook: (content, ctx) => {
+        if (typeof content === "string" && content.includes("debugger")) {
+          throw new Error(`${ctx.path}: debugger is not allowed`);
+        }
+      },
+    },
+  ],
+});
 ```
 
 ### Load a directory from disk
+
+`@ambiently-work/mirage/disk` is Node-only. It keeps the core package free of `node:fs`.
 
 ```ts
 import { VirtualFileSystem } from "@ambiently-work/mirage";
@@ -77,25 +121,21 @@ import { loadFromDisk, saveToDisk } from "@ambiently-work/mirage/disk";
 const fs = new VirtualFileSystem();
 await loadFromDisk(fs, "/path/to/repo", {
   target: "/workspace",
-  gitignore: true, // honour .gitignore files (root + nested) while walking
+  gitignore: true,
 });
 
-// …agent edits files in the mirage…
+// Agent edits files in the mirage.
 
 await saveToDisk(fs, "/workspace", "/path/to/output");
 ```
 
-### In-process git (browser / workerd / Bun / Node)
+### In-process git
 
-`@ambiently-work/mirage/git` bundles two engines that run anywhere — browsers,
-workerd, Bun, Node — with no `git` binary needed. Operations execute against
-the mirage filesystem directly: clone over HTTP, stage/commit, status/diff,
-branch/checkout, log, push/pull. `.git/` lives inside the working-tree mirage
-by default, or in an opt-in sidecar filesystem.
+`@ambiently-work/mirage/git` runs against the mirage filesystem directly in browsers, workerd, Bun, and Node. The working tree lives in the mirage. `.git/` lives there by default too, or in a sidecar filesystem if you pass one.
 
 ```ts
 import { VirtualFileSystem } from "@ambiently-work/mirage";
-import { MirageGit, IsoGitBackend, LibGit2Backend } from "@ambiently-work/mirage/git";
+import { IsoGitBackend, LibGit2Backend, MirageGit } from "@ambiently-work/mirage/git";
 
 const fs = new VirtualFileSystem({ bare: true });
 fs.mkdir("/workspace", { recursive: true });
@@ -103,7 +143,7 @@ fs.mkdir("/workspace", { recursive: true });
 const git = new MirageGit({
   fs,
   dir: "/workspace",
-  backend: new IsoGitBackend(),               // or new LibGit2Backend()
+  backend: new IsoGitBackend(), // or new LibGit2Backend()
   defaultAuthor: { name: "Agent", email: "agent@example.com" },
 });
 
@@ -113,35 +153,30 @@ fs.writeFile("/workspace/src/index.ts", "// agent edit\n");
 await git.add(["src/index.ts"]);
 const oid = await git.commit({ message: "feat: agent edit" });
 
-const status = await git.status();   // [filepath, head, workdir, stage] rows
+const status = await git.status();
 const log = await git.log({ depth: 5 });
 const blob = await git.readBlob(oid, "src/index.ts");
 ```
 
-**Picking a backend.** `IsoGitBackend` (default) is pure JS — clone/push/pull
-against any HTTPS git host that supports the smart protocol, full diff/walk
-support, smallest install. `LibGit2Backend` uses libgit2 compiled to WASM
-(via `wasm-git`) for local repository operations including
-init/add/commit/log/status/diff/branch/checkout, with clone/push/pull routed
-through the same mirage-backed git storage using isomorphic-git's HTTP
-transport. It's swappable so you can opt in for libgit2 semantics where you
-need them. Both implement the same `GitBackend` interface.
+`IsoGitBackend` is the default pure-JS backend. It uses `isomorphic-git` and supports clone, push, and pull over HTTPS.
 
-**Sidecar `.git/`.** Pass an `IFileSystem` instead of a path for `gitdir` to
-keep `.git/` out of the working-tree mirage. Useful when `snapshot(fs)` should
-serialize just the project, not the object database:
+`LibGit2Backend` uses libgit2 compiled to WASM for local repository operations, with remote clone, push, and pull routed through the same mirage-backed HTTP transport used by the isomorphic backend. Use it when you need libgit2 behavior for local git semantics.
+
+To keep `.git/` out of the working-tree mirage, pass an `IFileSystem` as `gitdir`:
 
 ```ts
 const repo = new VirtualFileSystem({ bare: true });
-const git = new MirageGit({ fs, dir: "/workspace", gitdir: repo, backend: new IsoGitBackend() });
+const git = new MirageGit({
+  fs,
+  dir: "/workspace",
+  gitdir: repo,
+  backend: new IsoGitBackend(),
+});
 ```
 
-### Load a git repo from disk (Node-only, requires `git` binary)
+### Load a git repo through the `git` binary
 
-For Node-only code that needs to bulk-load an existing checkout via the system
-`git` binary, use `@ambiently-work/mirage/git-cli`. It clones/inspects via
-`git ls-files` (so `.gitignore` and `core.excludesfile` are respected) and can
-write the mirage back out as a fresh repo.
+`@ambiently-work/mirage/git-cli` is Node-only and requires the system `git` binary. It is useful for loading an existing checkout or exporting a mirage subtree as a fresh repository.
 
 ```ts
 import { VirtualFileSystem } from "@ambiently-work/mirage";
@@ -165,7 +200,7 @@ await saveAsGitRepo(fs, "/workspace", "/tmp/out", {
 });
 ```
 
-### Match a `.gitignore` (no Node required)
+### Match a `.gitignore`
 
 ```ts
 import { GitIgnore, matchGitignore } from "@ambiently-work/mirage";
@@ -173,74 +208,41 @@ import { GitIgnore, matchGitignore } from "@ambiently-work/mirage";
 const gi = new GitIgnore("*.log\n!important.log\n/build/\n");
 gi.ignores("foo.log"); // true
 gi.ignores("important.log"); // false
-gi.ignores("build", true); // true (directory-only rule)
+gi.ignores("build", true); // true
 
-// Or one-shot:
 matchGitignore("dist/\n*.tmp", "dist/bundle.js"); // true
 ```
 
-### Layered overlay
+## Built-in tools
 
-```ts
-import { LayeredFileSystem, VirtualFileSystem, ReadOnlyFileSystem } from "@ambiently-work/mirage";
+Mirage exports optional built-in native tools from the root package:
 
-const base = new ReadOnlyFileSystem(new VirtualFileSystem({ files: { "/etc/config": "..." } }));
-const overlay = new VirtualFileSystem();
-const fs = new LayeredFileSystem(overlay, base);
+- `FilesystemBuiltins`: constrained `readFile`, `writeFile`, `listDir`, and `glob`.
+- `ShellBuiltins`: allowlisted command execution with timeout and stdout/stderr capture.
+- `HttpBuiltins`: allowlisted HTTP requests with response size limits.
+- `SearchBuiltins`: a pluggable web search adapter interface.
+- `CodeEvalBuiltins`: one-shot TypeScript execution through a caller-provided sandbox adapter.
 
-fs.writeFile("/etc/config", "modified"); // goes to overlay
-fs.readFile("/etc/config"); // reads from overlay
+All built-ins require explicit configuration at construction time. They do not get ambient filesystem, shell, network, or eval authority by default.
+
+## Docs
+
+- [Architecture](./docs/architecture.md)
+- [Providers and backends](./docs/providers.md)
+
+## Development
+
+```bash
+bun run check
+bun test
+bun run build
 ```
 
-### Write hooks
+## Built with Mirage
 
-Wrap any filesystem with `HookedFileSystem` to run formatters and linters before content is written. Rules run in order. A formatter returns new content; a linter throws.
-
-```ts
-import { HookedFileSystem, VirtualFileSystem } from "@ambiently-work/mirage";
-
-const fs = new HookedFileSystem(new VirtualFileSystem(), {
-  rules: [
-    {
-      glob: "/src/**/*.ts",
-      extensions: "ts",
-      hook: (content) => {
-        if (typeof content !== "string") return;
-        return `${content.trim()}\n`;
-      },
-    },
-    {
-      extensions: ["ts", "tsx"],
-      hook: (content, context) => {
-        if (typeof content === "string" && content.includes("debugger")) {
-          throw new Error(`${context.path}: debugger is not allowed`);
-        }
-      },
-    },
-  ],
-});
-
-fs.writeFile("/src/index.ts", "export const x = 1;   ");
-fs.readFile("/src/index.ts"); // "export const x = 1;\n"
-```
-
-## Built with mirage
-
-- [faux](https://github.com/ambiently-work/faux) — in-process POSIX shell.
-- [agent-sdk](https://github.com/ambiently-work/agent-sdk) — LLM agent loop with sandboxed tools.
+- [faux](https://github.com/ambiently-work/faux) - in-process POSIX shell.
+- [agent-sdk](https://github.com/ambiently-work/agent-sdk) - LLM agent loop with sandboxed tools.
 
 ## License
 
-MIT © ambiently
-
-## Built-in native tools
-
-Mirage now exports a set of built-in native tools from `src/tools/builtins`:
-
-- `FilesystemBuiltins` (`readFile`, `writeFile`, `listDir`, `glob`) constrained to a configured `rootDir` and optional path allowlist.
-- `ShellBuiltins` (`runCommand`) constrained to an explicit command allowlist with timeout, stdout/stderr capture, and exit code.
-- `HttpBuiltins` (`httpRequest`) constrained to a URL allowlist and a response size cap.
-- `SearchBuiltins` (`webSearch`) with a pluggable adapter interface for provider integrations.
-- `CodeEvalBuiltins` (`evaluate`) that delegates one-shot TypeScript execution to a provided sandbox adapter.
-
-All built-ins require explicit configuration at construction time to avoid ambient authority.
+MIT
