@@ -49,14 +49,14 @@ jobs:
           exit-code: "0"
 
       - name: Upload filesystem SARIF
-        uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7 # v4
+        uses: github/codeql-action/upload-sarif@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4
         if: always()
         with:
           sarif_file: trivy-fs.sarif
           category: trivy-fs
 
       - name: Upload config SARIF
-        uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7 # v4
+        uses: github/codeql-action/upload-sarif@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4
         if: always()
         with:
           sarif_file: trivy-config.sarif
